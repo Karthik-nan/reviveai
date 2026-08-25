@@ -9,4 +9,5 @@ import java.util.UUID;
 @Repository
 public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, UUID> {
     Optional<PaymentAttempt> findByIdempotencyKey(String idempotencyKey);
+    Optional<PaymentAttempt> findByExternalPaymentId( String externalPaymentId);
 }

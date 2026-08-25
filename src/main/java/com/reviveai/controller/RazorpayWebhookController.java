@@ -1,5 +1,4 @@
 package com.reviveai.controller;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.reviveai.config.KafkaConfig;
 import com.reviveai.service.WebhookSafetyService;
@@ -10,6 +9,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RestController
@@ -26,10 +27,17 @@ public class RazorpayWebhookController {
 
     @PostMapping("/razorpay")
     public ResponseEntity<String> handleRazorpayWebhook(
-            @RequestHeader(value = "X-Razorpay-Signature", required = false)
+
+            @RequestHeader(
+                    value = "X-Razorpay-Signature",
+                    required = false
+            )
             String signature,
 
-            @RequestHeader(value = "X-Razorpay-Event-Id", required = false)
+            @RequestHeader(
+                    value = "X-Razorpay-Event-Id",
+                    required = false
+            )
             String eventId,
 
             @RequestBody String rawPayload
@@ -48,6 +56,7 @@ public class RazorpayWebhookController {
                 );
 
         if (!validSignature) {
+
             log.warn("Invalid Razorpay webhook signature");
 
             return ResponseEntity
@@ -68,7 +77,23 @@ public class RazorpayWebhookController {
         }
 
         // ----------------------------------------------------
-        // 3. Idempotency protection using Redis
+        // 3. Validate JSON
+        // ----------------------------------------------------
+        try {
+
+            objectMapper.readTree(rawPayload);
+
+        } catch (Exception e) {
+
+            log.warn("Invalid JSON received from Razorpay");
+
+            return ResponseEntity
+                    .badRequest()
+                    .body("Invalid JSON");
+        }
+
+        // ----------------------------------------------------
+        // 4. Acquire idempotency lock BEFORE Kafka
         // ----------------------------------------------------
         boolean firstDelivery =
                 webhookSafetyService.acquireIdempotencyLock(eventId);
@@ -86,34 +111,20 @@ public class RazorpayWebhookController {
         }
 
         // ----------------------------------------------------
-        // 4. Validate JSON before publishing to Kafka
+        // 5. Publish to Kafka
         // ----------------------------------------------------
         try {
 
-            objectMapper.readTree(rawPayload);
-
-        } catch (Exception e) {
-
-            log.warn("Invalid JSON received from Razorpay");
-
-            return ResponseEntity
-                    .badRequest()
-                    .body("Invalid JSON");
-        }
-
-        // ----------------------------------------------------
-        // 5. Publish raw event to Kafka
-        // ----------------------------------------------------
-        try {
-
-            kafkaTemplate.send(
-                    KafkaConfig.RAW_PAYMENT_EVENTS_TOPIC,
-                    eventId,
-                    rawPayload
-            );
+            kafkaTemplate
+                    .send(
+                            KafkaConfig.RAW_PAYMENT_EVENTS_TOPIC,
+                            eventId,
+                            rawPayload
+                    )
+                    .get(10, TimeUnit.SECONDS);
 
             log.info(
-                    "Razorpay webhook published to Kafka. eventId={}",
+                    "Razorpay webhook successfully published to Kafka. eventId={}",
                     eventId
             );
 
