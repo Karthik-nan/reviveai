@@ -4,6 +4,9 @@ import com.reviveai.dto.PaymentFailedEvent;
 import com.reviveai.entity.PaymentAttempt;
 import com.reviveai.entity.RecoveryCase;
 import com.reviveai.entity.Subscription;
+import com.reviveai.recovery.RecoveryActionExecutor;
+import com.reviveai.recovery.RecoveryDecision;
+import com.reviveai.recovery.RecoveryStrategyEngine;
 import com.reviveai.repository.PaymentAttemptRepository;
 import com.reviveai.repository.RecoveryCaseRepository;
 import com.reviveai.repository.SubscriptionRepository;
@@ -19,142 +22,179 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class PaymentRecoveryService {
 
+
     private final SubscriptionRepository subscriptionRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final RecoveryCaseRepository recoveryCaseRepository;
 
+    private final RecoveryStrategyEngine recoveryStrategyEngine;
+    private final RecoveryActionExecutor recoveryActionExecutor;
+
     @Transactional
-    public void processPaymentFailure(PaymentFailedEvent event) {
+    public void processPaymentFailure(
+            PaymentFailedEvent event
+    ) {
 
         if (event == null ||
                 event.getPayload() == null ||
                 event.getPayload().getPayment() == null) {
 
-            log.warn("Ignoring invalid payment failure event");
+            log.warn(
+                    "Ignoring invalid payment failure event"
+            );
+
             return;
         }
 
         PaymentFailedEvent.Payment payment =
                 event.getPayload().getPayment();
 
-        String externalPaymentId = payment.getId();
-        String externalSubscriptionId = payment.getSubscriptionId();
+        String paymentId =
+                payment.getId();
+
+        String subscriptionId =
+                payment.getSubscriptionId();
 
         log.info(
                 "Processing payment failure. paymentId={}, subscriptionId={}",
-                externalPaymentId,
-                externalSubscriptionId
+                paymentId,
+                subscriptionId
         );
 
-        // ----------------------------------------------------
-        // 1. Validate required fields
-        // ----------------------------------------------------
+        // ---------------------------------------------
+        // 1. Validate payment ID
+        // ---------------------------------------------
 
-        if (externalPaymentId == null || externalPaymentId.isBlank()) {
-
-            log.warn("Payment event does not contain payment ID");
-            return;
-        }
-
-        if (externalSubscriptionId == null ||
-                externalSubscriptionId.isBlank()) {
+        if (paymentId == null ||
+                paymentId.isBlank()) {
 
             log.warn(
-                    "Payment event does not contain subscription ID. paymentId={}",
-                    externalPaymentId
+                    "Payment event does not contain payment ID"
             );
 
             return;
         }
 
-        // ----------------------------------------------------
-        // 2. Check whether payment was already processed
-        // ----------------------------------------------------
+        // ---------------------------------------------
+        // 2. Validate subscription ID
+        // ---------------------------------------------
+
+        if (subscriptionId == null ||
+                subscriptionId.isBlank()) {
+
+            log.warn(
+                    "Payment event does not contain subscription ID. paymentId={}",
+                    paymentId
+            );
+
+            return;
+        }
+
+        // ---------------------------------------------
+        // 3. Idempotency check
+        // ---------------------------------------------
 
         if (paymentAttemptRepository
-                .findByIdempotencyKey(externalPaymentId)
+                .findByIdempotencyKey(paymentId)
                 .isPresent()) {
 
             log.info(
                     "Payment already processed. paymentId={}",
-                    externalPaymentId
+                    paymentId
             );
 
             return;
         }
 
-        // ----------------------------------------------------
-        // 3. Find subscription
-        // ----------------------------------------------------
+        // ---------------------------------------------
+        // 4. Find subscription
+        // ---------------------------------------------
 
         Subscription subscription =
                 subscriptionRepository
                         .findByExternalSubscriptionId(
-                                externalSubscriptionId
+                                subscriptionId
                         )
                         .orElseThrow(() ->
                                 new IllegalStateException(
                                         "Subscription not found: "
-                                                + externalSubscriptionId
+                                                + subscriptionId
                                 )
                         );
 
-        // ----------------------------------------------------
-        // 4. Create failed payment attempt
-        // ----------------------------------------------------
+        // ---------------------------------------------
+        // 5. Convert amount
+        // ---------------------------------------------
 
         BigDecimal amount =
-                BigDecimal.valueOf(payment.getAmount())
-                        .movePointLeft(2);
+                BigDecimal.valueOf(
+                        payment.getAmount()
+                ).movePointLeft(2);
+
+        // ---------------------------------------------
+        // 6. Create payment attempt
+        // ---------------------------------------------
 
         PaymentAttempt paymentAttempt =
                 PaymentAttempt.builder()
                         .subscription(subscription)
-                        .externalPaymentId(externalPaymentId)
-                        .idempotencyKey(externalPaymentId)
+                        .externalPaymentId(paymentId)
+                        .idempotencyKey(paymentId)
                         .amount(amount)
-                        .status(PaymentAttempt.PaymentStatus.FAILED)
-                        .gatewayErrorCode(payment.getErrorCode())
+                        .status(
+                                PaymentAttempt.PaymentStatus.FAILED
+                        )
+                        .gatewayErrorCode(
+                                payment.getErrorCode()
+                        )
                         .gatewayErrorMessage(
                                 payment.getErrorDescription()
                         )
                         .build();
 
         paymentAttempt =
-                paymentAttemptRepository.save(paymentAttempt);
+                paymentAttemptRepository.save(
+                        paymentAttempt
+                );
 
         log.info(
                 "PaymentAttempt created. id={}, paymentId={}",
                 paymentAttempt.getId(),
-                externalPaymentId
+                paymentId
         );
 
-        // ----------------------------------------------------
-        // 5. Update subscription status
-        // ----------------------------------------------------
+        // ---------------------------------------------
+        // 7. Mark subscription as PAST_DUE
+        // ---------------------------------------------
 
         subscription.setStatus(
                 Subscription.SubscriptionStatus.PAST_DUE
         );
 
-        subscriptionRepository.save(subscription);
+        subscriptionRepository.save(
+                subscription
+        );
 
         log.info(
                 "Subscription marked PAST_DUE. subscriptionId={}",
                 subscription.getId()
         );
 
-        // ----------------------------------------------------
-        // 6. Create recovery case
-        // ----------------------------------------------------
+        // ---------------------------------------------
+        // 8. Create recovery case
+        // ---------------------------------------------
 
         RecoveryCase recoveryCase =
                 RecoveryCase.builder()
                         .subscription(subscription)
                         .failedPayment(paymentAttempt)
-                        .status(RecoveryCase.RecoveryStatus.OPEN)
+                        .status(
+                                RecoveryCase.RecoveryStatus.OPEN
+                        )
                         .recoveryPotential(
-                                determineRecoveryPotential(amount)
+                                determineRecoveryPotential(
+                                        amount
+                                )
                         )
                         .recoveryScore(
                                 calculateInitialRecoveryScore(
@@ -162,42 +202,81 @@ public class PaymentRecoveryService {
                                 )
                         )
                         .amountAtRisk(amount)
-                        .amountRecovered(BigDecimal.ZERO)
+                        .amountRecovered(
+                                BigDecimal.ZERO
+                        )
                         .build();
 
         recoveryCase =
-                recoveryCaseRepository.save(recoveryCase);
+                recoveryCaseRepository.save(
+                        recoveryCase
+                );
 
         log.info(
                 "Recovery case created. recoveryCaseId={}, paymentId={}",
                 recoveryCase.getId(),
-                externalPaymentId
+                paymentId
+        );
+
+        // ---------------------------------------------
+        // 9. Determine recovery strategy
+        // ---------------------------------------------
+
+        RecoveryDecision decision =
+                recoveryStrategyEngine.determineStrategy(
+                        recoveryCase
+                );
+
+        log.info(
+                "Recovery strategy determined. " +
+                        "recoveryCaseId={}, paymentId={}, " +
+                        "strategy={}, priority={}, score={}",
+                recoveryCase.getId(),
+                paymentId,
+                decision.getStrategy(),
+                decision.getPriority(),
+                decision.getRecoveryScore()
+        );
+
+        // ---------------------------------------------
+        // 10. Execute recovery action
+        // ---------------------------------------------
+
+        recoveryActionExecutor.execute(
+                recoveryCase,decision
+        );
+
+        log.info(
+                "Recovery action execution completed. " +
+                        "recoveryCaseId={}, strategy={}",
+                recoveryCase.getId(),
+                decision.getStrategy()
         );
     }
 
-    // --------------------------------------------------------
-    // Recovery potential
-    // --------------------------------------------------------
+// ---------------------------------------------
+// Recovery potential
+// ---------------------------------------------
 
-    private RecoveryCase.RecoveryPotential determineRecoveryPotential(
+    private RecoveryCase.RecoveryPotential
+    determineRecoveryPotential(
             BigDecimal amount
     ) {
 
         if (amount == null) {
+
             return RecoveryCase.RecoveryPotential.MEDIUM;
         }
 
-        /*
-         * Initial rule only.
-         *
-         * Later this can be replaced by an AI/risk model.
-         */
-
-        if (amount.compareTo(new BigDecimal("5000")) <= 0) {
+        if (amount.compareTo(
+                new BigDecimal("5000")
+        ) <= 0) {
 
             return RecoveryCase.RecoveryPotential.HIGH;
 
-        } else if (amount.compareTo(new BigDecimal("20000")) <= 0) {
+        } else if (amount.compareTo(
+                new BigDecimal("20000")
+        ) <= 0) {
 
             return RecoveryCase.RecoveryPotential.MEDIUM;
 
@@ -207,23 +286,18 @@ public class PaymentRecoveryService {
         }
     }
 
-    // --------------------------------------------------------
-    // Initial recovery score
-    // --------------------------------------------------------
+// ---------------------------------------------
+// Initial recovery score
+// ---------------------------------------------
 
     private BigDecimal calculateInitialRecoveryScore(
             String errorCode
     ) {
 
         if (errorCode == null) {
+
             return new BigDecimal("0.50");
         }
-
-        /*
-         * Temporary deterministic scoring.
-         *
-         * This is NOT the final AI recovery score.
-         */
 
         return switch (errorCode) {
 
@@ -243,5 +317,6 @@ public class PaymentRecoveryService {
                     new BigDecimal("0.50");
         };
     }
-}
 
+
+}
