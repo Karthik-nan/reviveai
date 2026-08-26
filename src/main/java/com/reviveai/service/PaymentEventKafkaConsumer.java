@@ -11,7 +11,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 @Slf4j
-@Service
+ //@Service
 @RequiredArgsConstructor
 public class PaymentEventKafkaConsumer {
 

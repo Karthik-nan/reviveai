@@ -1,0 +1,23 @@
+CUSTOMER NOTIFICATION POLICY
+
+Policy ID: NOTIFY-001
+
+Purpose:
+Define when customers should be notified about payment failures.
+
+Rules:
+
+1. Customers should be notified when a payment failure creates a
+   recovery case.
+
+2. The notification should explain that the payment was unsuccessful.
+
+3. The notification must not expose internal error information.
+
+4. Customers should be informed when an automatic retry is scheduled.
+
+5. If automatic recovery is exhausted, the customer should receive
+   a final notification.
+
+Allowed actions:
+- CUSTOMER_NOTIFICATION

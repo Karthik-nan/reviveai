@@ -1,0 +1,33 @@
+PAYMENT RETRY POLICY
+
+Policy ID: RETRY-001
+
+Purpose:
+Define when a failed payment may be retried.
+
+Rules:
+
+1. Payments with INSUFFICIENT_FUNDS may be retried.
+
+2. The first retry should occur after a minimum delay of 24 hours.
+
+3. A payment must not be retried more than 3 times.
+
+4. A retry must not be performed immediately after the original failure.
+
+5. If the maximum retry count has been reached, the system must not
+   automatically retry the payment.
+
+6. Failed retries should result in customer notification.
+
+7. Payments above INR 20,000 require additional review before
+   automated recovery actions.
+
+Allowed recovery actions:
+- RETRY_PAYMENT
+- CUSTOMER_NOTIFICATION
+
+Prohibited actions:
+- Unlimited retries
+- Immediate repeated retries
+- Automatic cancellation of high-value subscriptions

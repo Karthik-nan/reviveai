@@ -1,0 +1,27 @@
+HIGH VALUE PAYMENT POLICY
+
+Policy ID: HIGH-VALUE-001
+
+Purpose:
+Protect high-value transactions from unsafe automated recovery.
+
+Rules:
+
+1. Payments greater than INR 20,000 are considered high-value.
+
+2. High-value payments must not receive unrestricted automated retries.
+
+3. High-value recovery cases require additional decision validation.
+
+4. The AI recovery agent must not authorize an action that violates
+   this policy.
+
+5. When policy confidence is insufficient, the case must be escalated
+   for human review.
+
+Allowed actions:
+- HUMAN_REVIEW
+- CUSTOMER_NOTIFICATION
+
+Restricted actions:
+- RETRY_PAYMENT

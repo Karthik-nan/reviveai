@@ -42,6 +42,8 @@ public class PaymentFailedEvent {
 
         private Payment payment;
 
+        private Subscription subscription;
+
         public Payment getPayment() {
             return payment;
         }
@@ -49,10 +51,46 @@ public class PaymentFailedEvent {
         public void setPayment(Payment payment) {
             this.payment = payment;
         }
+
+        public Subscription getSubscription() {
+            return subscription;
+        }
+
+        public void setSubscription(Subscription subscription) {
+            this.subscription = subscription;
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Payment {
+
+        private Entity entity;
+
+        public Entity getEntity() {
+            return entity;
+        }
+
+        public void setEntity(Entity entity) {
+            this.entity = entity;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Subscription {
+
+        private SubscriptionEntity entity;
+
+        public SubscriptionEntity getEntity() {
+            return entity;
+        }
+
+        public void setEntity(SubscriptionEntity entity) {
+            this.entity = entity;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Entity {
 
         private String id;
         private Long amount;
@@ -144,6 +182,20 @@ public class PaymentFailedEvent {
 
         public void setErrorDescription(String errorDescription) {
             this.errorDescription = errorDescription;
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class SubscriptionEntity {
+
+        private String id;
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
         }
     }
 }

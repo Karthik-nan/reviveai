@@ -29,15 +29,20 @@ public class RecoveryServiceImpl implements RecoveryService {
 
         if (event == null ||
                 event.getPayload() == null ||
-                event.getPayload().getPayment() == null) {
+                event.getPayload().getPayment() == null ||
+                event.getPayload().getPayment().getEntity() == null) {
 
             log.warn("Invalid payment failure event");
 
             return;
         }
 
-        PaymentFailedEvent.Payment payment =
-                event.getPayload().getPayment();
+        // Razorpay structure:
+        // payload -> payment -> entity
+        PaymentFailedEvent.Entity payment =
+                event.getPayload()
+                        .getPayment()
+                        .getEntity();
 
         log.info(
                 "Processing payment failure. paymentId={}, customerId={}",
@@ -49,7 +54,8 @@ public class RecoveryServiceImpl implements RecoveryService {
         // 1. Validate required payment information
         // ----------------------------------------------------
 
-        if (payment.getId() == null || payment.getId().isBlank()) {
+        if (payment.getId() == null ||
+                payment.getId().isBlank()) {
 
             log.warn("Payment event does not contain payment ID");
 
@@ -78,7 +84,7 @@ public class RecoveryServiceImpl implements RecoveryService {
         }
 
         // ----------------------------------------------------
-        // 2. Check whether this payment was already processed
+        // 2. Check whether payment was already processed
         // ----------------------------------------------------
 
         if (paymentAttemptRepository
@@ -110,7 +116,7 @@ public class RecoveryServiceImpl implements RecoveryService {
                         );
 
         // ----------------------------------------------------
-        // 4. Convert amount from paise to rupees
+        // 4. Convert Razorpay paise -> rupees
         // ----------------------------------------------------
 
         BigDecimal amount =
@@ -127,15 +133,21 @@ public class RecoveryServiceImpl implements RecoveryService {
                         .externalPaymentId(payment.getId())
                         .idempotencyKey(payment.getId())
                         .amount(amount)
-                        .status(PaymentAttempt.PaymentStatus.FAILED)
-                        .gatewayErrorCode(payment.getErrorCode())
+                        .status(
+                                PaymentAttempt.PaymentStatus.FAILED
+                        )
+                        .gatewayErrorCode(
+                                payment.getErrorCode()
+                        )
                         .gatewayErrorMessage(
                                 payment.getErrorDescription()
                         )
                         .build();
 
         paymentAttempt =
-                paymentAttemptRepository.save(paymentAttempt);
+                paymentAttemptRepository.save(
+                        paymentAttempt
+                );
 
         // ----------------------------------------------------
         // 6. Create RecoveryCase
@@ -151,13 +163,19 @@ public class RecoveryServiceImpl implements RecoveryService {
                         .recoveryPotential(
                                 RecoveryCase.RecoveryPotential.MEDIUM
                         )
-                        .recoveryScore(BigDecimal.ZERO)
+                        .recoveryScore(
+                                BigDecimal.ZERO
+                        )
                         .amountAtRisk(amount)
-                        .amountRecovered(BigDecimal.ZERO)
+                        .amountRecovered(
+                                BigDecimal.ZERO
+                        )
                         .build();
 
         recoveryCase =
-                recoveryCaseRepository.save(recoveryCase);
+                recoveryCaseRepository.save(
+                        recoveryCase
+                );
 
         // ----------------------------------------------------
         // 7. Log result
@@ -172,3 +190,4 @@ public class RecoveryServiceImpl implements RecoveryService {
         );
     }
 }
+

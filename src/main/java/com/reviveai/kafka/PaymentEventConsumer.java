@@ -38,21 +38,24 @@ public class PaymentEventConsumer {
                     );
 
             // ------------------------------------------------
-            // 2. Validate event
+            // 2. Validate event structure
             // ------------------------------------------------
 
             if (event.getPayload() == null ||
-                    event.getPayload().getPayment() == null) {
+                    event.getPayload().getPayment() == null ||
+                    event.getPayload().getPayment().getEntity() == null) {
 
                 log.warn(
-                        "Invalid payment event: payment data is missing"
+                        "Invalid payment event: payment entity is missing"
                 );
 
                 return;
             }
 
-            PaymentFailedEvent.Payment payment =
-                    event.getPayload().getPayment();
+            PaymentFailedEvent.Entity payment =
+                    event.getPayload()
+                            .getPayment()
+                            .getEntity();
 
             // ------------------------------------------------
             // 3. Log payment failure

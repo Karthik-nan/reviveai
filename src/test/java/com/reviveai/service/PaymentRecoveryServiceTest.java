@@ -1,4 +1,5 @@
 package com.reviveai.service;
+
 import com.reviveai.dto.PaymentFailedEvent;
 import com.reviveai.entity.PaymentAttempt;
 import com.reviveai.entity.RecoveryCase;
@@ -21,7 +22,6 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -46,17 +46,40 @@ class PaymentRecoveryServiceTest {
     @InjectMocks
     private PaymentRecoveryService paymentRecoveryService;
 
-    @Test
-    void shouldProcessPaymentFailure() {
+
+    // ============================================================
+    // Helper method
+    // ============================================================
+
+    private PaymentFailedEvent.Payment createPayment(
+            String paymentId,
+            String subscriptionId,
+            Long amount,
+            String errorCode,
+            String errorDescription
+    ) {
+
+        PaymentFailedEvent.Entity entity =
+                new PaymentFailedEvent.Entity();
+
+        entity.setId(paymentId);
+        entity.setSubscriptionId(subscriptionId);
+        entity.setAmount(amount);
+        entity.setErrorCode(errorCode);
+        entity.setErrorDescription(errorDescription);
 
         PaymentFailedEvent.Payment payment =
                 new PaymentFailedEvent.Payment();
 
-        payment.setId("pay_test_001");
-        payment.setSubscriptionId("sub_test_001");
-        payment.setAmount(7000L);
-        payment.setErrorCode("INSUFFICIENT_FUNDS");
-        payment.setErrorDescription("Insufficient funds");
+        payment.setEntity(entity);
+
+        return payment;
+    }
+
+
+    private PaymentFailedEvent createEvent(
+            PaymentFailedEvent.Payment payment
+    ) {
 
         PaymentFailedEvent.Payload payload =
                 new PaymentFailedEvent.Payload();
@@ -67,6 +90,29 @@ class PaymentRecoveryServiceTest {
                 new PaymentFailedEvent();
 
         event.setPayload(payload);
+
+        return event;
+    }
+
+
+    // ============================================================
+    // 1. Successful payment failure processing
+    // ============================================================
+
+    @Test
+    void shouldProcessPaymentFailure() {
+
+        PaymentFailedEvent.Payment payment =
+                createPayment(
+                        "pay_test_001",
+                        "sub_test_001",
+                        7000L,
+                        "INSUFFICIENT_FUNDS",
+                        "Insufficient funds"
+                );
+
+        PaymentFailedEvent event =
+                createEvent(payment);
 
         UUID subscriptionId = UUID.randomUUID();
         UUID paymentAttemptId = UUID.randomUUID();
@@ -195,24 +241,25 @@ class PaymentRecoveryServiceTest {
         );
     }
 
+
+    // ============================================================
+    // 2. Duplicate payment
+    // ============================================================
+
     @Test
     void shouldIgnoreDuplicatePayment() {
 
         PaymentFailedEvent.Payment payment =
-                new PaymentFailedEvent.Payment();
-
-        payment.setId("pay_duplicate");
-        payment.setSubscriptionId("sub_test_001");
-
-        PaymentFailedEvent.Payload payload =
-                new PaymentFailedEvent.Payload();
-
-        payload.setPayment(payment);
+                createPayment(
+                        "pay_duplicate",
+                        "sub_test_001",
+                        7000L,
+                        "INSUFFICIENT_FUNDS",
+                        "Insufficient funds"
+                );
 
         PaymentFailedEvent event =
-                new PaymentFailedEvent();
-
-        event.setPayload(payload);
+                createEvent(payment);
 
         PaymentAttempt existingPayment =
                 PaymentAttempt.builder()
@@ -264,6 +311,11 @@ class PaymentRecoveryServiceTest {
         );
     }
 
+
+    // ============================================================
+    // 3. Null event
+    // ============================================================
+
     @Test
     void shouldIgnoreInvalidEvent() {
 
@@ -278,6 +330,11 @@ class PaymentRecoveryServiceTest {
                 recoveryActionExecutor
         );
     }
+
+
+    // ============================================================
+    // 4. Missing payload
+    // ============================================================
 
     @Test
     void shouldIgnoreEventWhenPayloadIsMissing() {
@@ -296,6 +353,11 @@ class PaymentRecoveryServiceTest {
                 recoveryActionExecutor
         );
     }
+
+
+    // ============================================================
+    // 5. Missing payment
+    // ============================================================
 
     @Test
     void shouldIgnoreEventWhenPaymentIsMissing() {
@@ -320,23 +382,26 @@ class PaymentRecoveryServiceTest {
         );
     }
 
+
+    // ============================================================
+    // 6. Missing payment ID
+    // ============================================================
+
     @Test
     void shouldIgnorePaymentWhenPaymentIdIsMissing() {
+
+        PaymentFailedEvent.Entity entity =
+                new PaymentFailedEvent.Entity();
+
+        entity.setSubscriptionId("sub_test_001");
 
         PaymentFailedEvent.Payment payment =
                 new PaymentFailedEvent.Payment();
 
-        payment.setSubscriptionId("sub_test_001");
-
-        PaymentFailedEvent.Payload payload =
-                new PaymentFailedEvent.Payload();
-
-        payload.setPayment(payment);
+        payment.setEntity(entity);
 
         PaymentFailedEvent event =
-                new PaymentFailedEvent();
-
-        event.setPayload(payload);
+                createEvent(payment);
 
         paymentRecoveryService
                 .processPaymentFailure(event);
@@ -349,24 +414,27 @@ class PaymentRecoveryServiceTest {
                 recoveryActionExecutor
         );
     }
+
+
+    // ============================================================
+    // 7. Missing subscription ID
+    // ============================================================
 
     @Test
     void shouldIgnorePaymentWhenSubscriptionIdIsMissing() {
 
+        PaymentFailedEvent.Entity entity =
+                new PaymentFailedEvent.Entity();
+
+        entity.setId("pay_test_001");
+
         PaymentFailedEvent.Payment payment =
                 new PaymentFailedEvent.Payment();
 
-        payment.setId("pay_test_001");
-
-        PaymentFailedEvent.Payload payload =
-                new PaymentFailedEvent.Payload();
-
-        payload.setPayment(payment);
+        payment.setEntity(entity);
 
         PaymentFailedEvent event =
-                new PaymentFailedEvent();
-
-        event.setPayload(payload);
+                createEvent(payment);
 
         paymentRecoveryService
                 .processPaymentFailure(event);
@@ -380,26 +448,25 @@ class PaymentRecoveryServiceTest {
         );
     }
 
+
+    // ============================================================
+    // 8. Subscription does not exist
+    // ============================================================
+
     @Test
-    void shouldThrowExceptionWhenSubscriptionDoesNotExist() {
+    void shouldIgnorePaymentWhenSubscriptionDoesNotExist() {
 
         PaymentFailedEvent.Payment payment =
-                new PaymentFailedEvent.Payment();
-
-        payment.setId("pay_test_002");
-        payment.setSubscriptionId("sub_missing");
-        payment.setAmount(7000L);
-        payment.setErrorCode("CARD_DECLINED");
-
-        PaymentFailedEvent.Payload payload =
-                new PaymentFailedEvent.Payload();
-
-        payload.setPayment(payment);
+                createPayment(
+                        "pay_test_002",
+                        "sub_missing",
+                        7000L,
+                        "CARD_DECLINED",
+                        "Card declined"
+                );
 
         PaymentFailedEvent event =
-                new PaymentFailedEvent();
-
-        event.setPayload(payload);
+                createEvent(payment);
 
         when(
                 paymentAttemptRepository
@@ -415,11 +482,14 @@ class PaymentRecoveryServiceTest {
                         )
         ).thenReturn(Optional.empty());
 
-        assertThrows(
-                IllegalStateException.class,
-                () ->
-                        paymentRecoveryService
-                                .processPaymentFailure(event)
+        paymentRecoveryService
+                .processPaymentFailure(event);
+
+        verify(
+                subscriptionRepository,
+                times(1)
+        ).findByExternalSubscriptionId(
+                "sub_missing"
         );
 
         verify(
@@ -448,4 +518,3 @@ class PaymentRecoveryServiceTest {
         );
     }
 }
-
