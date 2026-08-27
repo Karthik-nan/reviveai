@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -22,14 +23,12 @@ public class RecoveryActionExecutor {
     ) {
 
         if (recoveryCase == null) {
-
             throw new IllegalArgumentException(
                     "Recovery case cannot be null"
             );
         }
 
         if (decision == null) {
-
             throw new IllegalArgumentException(
                     "Recovery decision cannot be null"
             );
@@ -49,13 +48,74 @@ public class RecoveryActionExecutor {
         }
 
         log.info(
-                "Executing recovery action. " +
+                "Preparing recovery action. " +
                         "recoveryCaseId={}, strategy={}, priority={}, score={}",
                 recoveryCase.getId(),
                 strategy,
                 decision.getPriority(),
                 decision.getRecoveryScore()
         );
+
+        /*
+         * Idempotency check.
+         *
+         * Prevent duplicate execution of the same strategy
+         * for the same recovery case.
+         */
+        Optional<RecoveryAction> existingAction =
+                recoveryActionRepository
+                        .findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
+                                recoveryCase.getId(),
+                                strategy
+                        );
+
+        if (existingAction.isPresent()) {
+
+            RecoveryAction action =
+                    existingAction.get();
+
+            if (action.getStatus()
+                    == RecoveryAction.ActionStatus.EXECUTED) {
+
+                log.info(
+                        "Recovery action already executed. " +
+                                "Skipping duplicate execution. " +
+                                "actionId={}, recoveryCaseId={}, strategy={}",
+                        action.getId(),
+                        recoveryCase.getId(),
+                        strategy
+                );
+
+                return;
+            }
+
+            if (action.getStatus()
+                    == RecoveryAction.ActionStatus.PENDING) {
+
+                log.info(
+                        "Recovery action already pending. " +
+                                "Skipping duplicate execution. " +
+                                "actionId={}, recoveryCaseId={}, strategy={}",
+                        action.getId(),
+                        recoveryCase.getId(),
+                        strategy
+                );
+
+                return;
+            }
+
+            /*
+             * FAILED actions are allowed to create another attempt.
+             */
+            log.info(
+                    "Previous recovery action failed. " +
+                            "Creating a new recovery attempt. " +
+                            "previousActionId={}, recoveryCaseId={}, strategy={}",
+                    action.getId(),
+                    recoveryCase.getId(),
+                    strategy
+            );
+        }
 
         RecoveryAction recoveryAction =
                 RecoveryAction.builder()
@@ -77,9 +137,11 @@ public class RecoveryActionExecutor {
                 );
 
         log.info(
-                "Recovery action created. actionId={}, recoveryCaseId={}",
+                "Recovery action created. " +
+                        "actionId={}, recoveryCaseId={}, strategy={}",
                 recoveryAction.getId(),
-                recoveryCase.getId()
+                recoveryCase.getId(),
+                strategy
         );
 
         try {
@@ -100,8 +162,9 @@ public class RecoveryActionExecutor {
 
             log.info(
                     "Recovery action executed successfully. " +
-                            "actionId={}, strategy={}",
+                            "actionId={}, recoveryCaseId={}, strategy={}",
                     recoveryAction.getId(),
+                    recoveryCase.getId(),
                     strategy
             );
 
@@ -117,8 +180,9 @@ public class RecoveryActionExecutor {
 
             log.error(
                     "Recovery action execution failed. " +
-                            "actionId={}, strategy={}",
+                            "actionId={}, recoveryCaseId={}, strategy={}",
                     recoveryAction.getId(),
+                    recoveryCase.getId(),
                     strategy,
                     exception
             );
@@ -208,6 +272,4 @@ public class RecoveryActionExecutor {
 
         // Manual review workflow will be implemented later.
     }
-
-
 }

@@ -7,13 +7,14 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public interface RecoveryActionRepository
         extends JpaRepository<RecoveryAction, Long> {
 
     List<RecoveryAction> findByRecoveryCaseId(
-            Long recoveryCaseId
+            UUID recoveryCaseId
     );
 
     List<RecoveryAction> findByStatus(
@@ -21,8 +22,7 @@ public interface RecoveryActionRepository
     );
 
     Optional<RecoveryAction> findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
-            Long recoveryCaseId,
+            UUID recoveryCaseId,
             RecoveryStrategy strategy
     );
-
 }
