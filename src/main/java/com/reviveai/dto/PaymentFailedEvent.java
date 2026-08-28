@@ -13,6 +13,10 @@ public class PaymentFailedEvent {
 
     private Payload payload;
 
+    // ========================================================
+    // GETTERS / SETTERS
+    // ========================================================
+
     public String getEvent() {
         return event;
     }
@@ -37,12 +41,18 @@ public class PaymentFailedEvent {
         this.payload = payload;
     }
 
+    // ========================================================
+    // PAYLOAD
+    // ========================================================
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Payload {
 
         private Payment payment;
 
         private Subscription subscription;
+
+        private Customer customer;
 
         public Payment getPayment() {
             return payment;
@@ -59,7 +69,19 @@ public class PaymentFailedEvent {
         public void setSubscription(Subscription subscription) {
             this.subscription = subscription;
         }
+
+        public Customer getCustomer() {
+            return customer;
+        }
+
+        public void setCustomer(Customer customer) {
+            this.customer = customer;
+        }
     }
+
+    // ========================================================
+    // PAYMENT
+    // ========================================================
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Payment {
@@ -75,6 +97,10 @@ public class PaymentFailedEvent {
         }
     }
 
+    // ========================================================
+    // SUBSCRIPTION
+    // ========================================================
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Subscription {
 
@@ -89,12 +115,55 @@ public class PaymentFailedEvent {
         }
     }
 
+    // ========================================================
+    // CUSTOMER
+    // ========================================================
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Customer {
+
+        private CustomerEntity entity;
+
+        public CustomerEntity getEntity() {
+            return entity;
+        }
+
+        public void setEntity(CustomerEntity entity) {
+            this.entity = entity;
+        }
+    }
+
+    // ========================================================
+    // CUSTOMER ENTITY
+    // ========================================================
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class CustomerEntity {
+
+        private String id;
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+    }
+
+    // ========================================================
+    // PAYMENT ENTITY
+    // ========================================================
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Entity {
 
         private String id;
+
         private Long amount;
+
         private String currency;
+
         private String status;
 
         @JsonProperty("order_id")
@@ -184,6 +253,10 @@ public class PaymentFailedEvent {
             this.errorDescription = errorDescription;
         }
     }
+
+    // ========================================================
+    // SUBSCRIPTION ENTITY
+    // ========================================================
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class SubscriptionEntity {

@@ -3,44 +3,119 @@ package com.reviveai.recovery;
 import com.reviveai.entity.RecoveryAction;
 import com.reviveai.entity.RecoveryCase;
 import com.reviveai.repository.RecoveryActionRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class RecoveryActionExecutor {
 
     private final RecoveryActionRepository recoveryActionRepository;
+
+    private final RecoveryDecisionGuard recoveryDecisionGuard;
+
+    private final Map<RecoveryStrategy, RecoveryActionHandler> handlers;
+
+    public RecoveryActionExecutor(
+            RecoveryActionRepository recoveryActionRepository,
+            List<RecoveryActionHandler> handlerList,
+            RecoveryDecisionGuard recoveryDecisionGuard
+    ) {
+
+        this.recoveryActionRepository =
+                recoveryActionRepository;
+
+        this.recoveryDecisionGuard =
+                recoveryDecisionGuard;
+
+        this.handlers =
+                handlerList.stream()
+                        .collect(Collectors.toMap(
+                                RecoveryActionHandler::getStrategy,
+                                Function.identity()
+                        ));
+
+        log.info(
+                "Recovery action handlers registered. strategies={}",
+                handlers.keySet()
+        );
+    }
 
     public void execute(
             RecoveryCase recoveryCase,
             RecoveryDecision decision
     ) {
 
+        /*
+         * Basic input validation.
+         */
+
         if (recoveryCase == null) {
+
             throw new IllegalArgumentException(
                     "Recovery case cannot be null"
             );
         }
 
         if (decision == null) {
+
             throw new IllegalArgumentException(
                     "Recovery decision cannot be null"
             );
         }
 
+        /*
+         * Recovery decision safety validation.
+         *
+         * The guard prevents unsafe automated recovery
+         * decisions from reaching the execution layer.
+         */
+
+        RecoveryDecisionGuard.GuardResult guardResult =
+                recoveryDecisionGuard.validate(
+                        recoveryCase,
+                        decision
+                );
+
+        if (!guardResult.isAllowed()) {
+
+            log.warn(
+                    "Recovery decision rejected by guard. " +
+                            "recoveryCaseId={}, strategy={}, reason={}",
+                    recoveryCase.getId(),
+                    decision.getStrategy(),
+                    guardResult.getReason()
+            );
+
+            return;
+        }
+
+        /*
+         * Extract selected strategy.
+         */
+
         RecoveryStrategy strategy =
                 decision.getStrategy();
+
+        /*
+         * Defensive check.
+         *
+         * The guard already checks this, but keeping
+         * this check here makes the executor defensive.
+         */
 
         if (strategy == null) {
 
             log.warn(
-                    "Recovery decision does not contain a strategy. recoveryCaseId={}",
+                    "Recovery decision does not contain a strategy. " +
+                            "recoveryCaseId={}",
                     recoveryCase.getId()
             );
 
@@ -59,9 +134,10 @@ public class RecoveryActionExecutor {
         /*
          * Idempotency check.
          *
-         * Prevent duplicate execution of the same strategy
-         * for the same recovery case.
+         * Prevent duplicate execution of the same
+         * recovery strategy for the same recovery case.
          */
+
         Optional<RecoveryAction> existingAction =
                 recoveryActionRepository
                         .findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
@@ -73,6 +149,10 @@ public class RecoveryActionExecutor {
 
             RecoveryAction action =
                     existingAction.get();
+
+            /*
+             * Already executed.
+             */
 
             if (action.getStatus()
                     == RecoveryAction.ActionStatus.EXECUTED) {
@@ -88,6 +168,10 @@ public class RecoveryActionExecutor {
 
                 return;
             }
+
+            /*
+             * Already pending.
+             */
 
             if (action.getStatus()
                     == RecoveryAction.ActionStatus.PENDING) {
@@ -105,8 +189,10 @@ public class RecoveryActionExecutor {
             }
 
             /*
-             * FAILED actions are allowed to create another attempt.
+             * FAILED actions are allowed to create
+             * another recovery attempt.
              */
+
             log.info(
                     "Previous recovery action failed. " +
                             "Creating a new recovery attempt. " +
@@ -116,6 +202,10 @@ public class RecoveryActionExecutor {
                     strategy
             );
         }
+
+        /*
+         * Create a new recovery action.
+         */
 
         RecoveryAction recoveryAction =
                 RecoveryAction.builder()
@@ -128,7 +218,9 @@ public class RecoveryActionExecutor {
                         .status(
                                 RecoveryAction.ActionStatus.PENDING
                         )
-                        .reason(decision.getReason())
+                        .reason(
+                                decision.getReason()
+                        )
                         .build();
 
         recoveryAction =
@@ -144,9 +236,20 @@ public class RecoveryActionExecutor {
                 strategy
         );
 
+        /*
+         * Execute the strategy-specific handler.
+         */
+
         try {
 
-            executeAction(decision);
+            executeAction(
+                    recoveryCase,
+                    decision
+            );
+
+            /*
+             * Handler completed successfully.
+             */
 
             recoveryAction.setStatus(
                     RecoveryAction.ActionStatus.EXECUTED
@@ -170,6 +273,13 @@ public class RecoveryActionExecutor {
 
         } catch (Exception exception) {
 
+            /*
+             * Handler failed.
+             *
+             * Persist FAILED state before propagating
+             * the exception to the caller.
+             */
+
             recoveryAction.setStatus(
                     RecoveryAction.ActionStatus.FAILED
             );
@@ -191,85 +301,40 @@ public class RecoveryActionExecutor {
         }
     }
 
+    /**
+     * Finds the handler registered for the selected
+     * recovery strategy and delegates execution to it.
+     */
     private void executeAction(
+            RecoveryCase recoveryCase,
             RecoveryDecision decision
     ) {
 
-        switch (decision.getStrategy()) {
+        RecoveryStrategy strategy =
+                decision.getStrategy();
 
-            case RETRY_PAYMENT ->
-                    retryPayment(decision);
+        RecoveryActionHandler handler =
+                handlers.get(strategy);
 
-            case UPDATE_PAYMENT_METHOD ->
-                    updatePaymentMethod(decision);
+        if (handler == null) {
 
-            case CUSTOMER_ACTION_REQUIRED ->
-                    requestCustomerAction(decision);
-
-            case MANUAL_REVIEW ->
-                    sendForManualReview(decision);
-
-            default ->
-                    throw new IllegalStateException(
-                            "Unsupported recovery strategy: "
-                                    + decision.getStrategy()
-                    );
+            throw new IllegalStateException(
+                    "No recovery action handler registered for strategy: "
+                            + strategy
+            );
         }
-    }
-
-    private void retryPayment(
-            RecoveryDecision decision
-    ) {
 
         log.info(
-                "Payment retry action selected. " +
-                        "priority={}, score={}",
-                decision.getPriority(),
-                decision.getRecoveryScore()
+                "Executing recovery action handler. " +
+                        "strategy={}, recoveryCaseId={}, handler={}",
+                strategy,
+                recoveryCase.getId(),
+                handler.getClass().getSimpleName()
         );
 
-        // Actual payment gateway retry will be implemented later.
-    }
-
-    private void updatePaymentMethod(
-            RecoveryDecision decision
-    ) {
-
-        log.info(
-                "Payment method update required. " +
-                        "priority={}, score={}",
-                decision.getPriority(),
-                decision.getRecoveryScore()
+        handler.handle(
+                recoveryCase,
+                decision
         );
-
-        // Payment-method update flow will be implemented later.
-    }
-
-    private void requestCustomerAction(
-            RecoveryDecision decision
-    ) {
-
-        log.info(
-                "Customer action required. " +
-                        "priority={}, score={}",
-                decision.getPriority(),
-                decision.getRecoveryScore()
-        );
-
-        // Customer notification flow will be implemented later.
-    }
-
-    private void sendForManualReview(
-            RecoveryDecision decision
-    ) {
-
-        log.info(
-                "Recovery case sent for manual review. " +
-                        "priority={}, score={}",
-                decision.getPriority(),
-                decision.getRecoveryScore()
-        );
-
-        // Manual review workflow will be implemented later.
     }
 }

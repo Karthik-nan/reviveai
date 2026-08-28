@@ -24,11 +24,18 @@ import java.util.Map;
 @EnableKafka
 public class KafkaConfig {
 
+    // ============================================================
+    // TOPIC NAMES
+    // ============================================================
+
     public static final String RAW_PAYMENT_EVENTS_TOPIC =
             "payment.events.raw";
 
     public static final String RECOVERY_CASES_TOPIC =
             "recovery.cases.created";
+
+    public static final String RECOVERY_ACTIONS_TOPIC =
+            "recovery.actions";
 
     public static final String PAYMENT_DLQ_TOPIC =
             "payment.events.dlq";
@@ -40,8 +47,12 @@ public class KafkaConfig {
     // TOPICS
     // ============================================================
 
+    /**
+     * Raw payment events received from the payment provider.
+     */
     @Bean
     public NewTopic rawPaymentEventsTopic() {
+
         return TopicBuilder
                 .name(RAW_PAYMENT_EVENTS_TOPIC)
                 .partitions(3)
@@ -49,8 +60,12 @@ public class KafkaConfig {
                 .build();
     }
 
+    /**
+     * Recovery cases created after payment failure analysis.
+     */
     @Bean
     public NewTopic recoveryCasesTopic() {
+
         return TopicBuilder
                 .name(RECOVERY_CASES_TOPIC)
                 .partitions(3)
@@ -58,8 +73,25 @@ public class KafkaConfig {
                 .build();
     }
 
+    /**
+     * Recovery actions that are ready for asynchronous execution.
+     */
+    @Bean
+    public NewTopic recoveryActionsTopic() {
+
+        return TopicBuilder
+                .name(RECOVERY_ACTIONS_TOPIC)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    /**
+     * Dead-letter topic for payment events that cannot be processed.
+     */
     @Bean
     public NewTopic paymentDlqTopic() {
+
         return TopicBuilder
                 .name(PAYMENT_DLQ_TOPIC)
                 .partitions(1)
@@ -74,7 +106,8 @@ public class KafkaConfig {
     @Bean
     public ProducerFactory<String, String> producerFactory() {
 
-        Map<String, Object> configProps = new HashMap<>();
+        Map<String, Object> configProps =
+                new HashMap<>();
 
         configProps.put(
                 ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -91,14 +124,19 @@ public class KafkaConfig {
                 StringSerializer.class
         );
 
-        return new DefaultKafkaProducerFactory<>(configProps);
+        return new DefaultKafkaProducerFactory<>(
+                configProps
+        );
     }
 
     @Bean
     public KafkaTemplate<String, String> kafkaTemplate(
             ProducerFactory<String, String> producerFactory
     ) {
-        return new KafkaTemplate<>(producerFactory);
+
+        return new KafkaTemplate<>(
+                producerFactory
+        );
     }
 
     // ============================================================
@@ -108,7 +146,8 @@ public class KafkaConfig {
     @Bean
     public ConsumerFactory<String, String> consumerFactory() {
 
-        Map<String, Object> configProps = new HashMap<>();
+        Map<String, Object> configProps =
+                new HashMap<>();
 
         configProps.put(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -135,7 +174,9 @@ public class KafkaConfig {
                 StringDeserializer.class
         );
 
-        return new DefaultKafkaConsumerFactory<>(configProps);
+        return new DefaultKafkaConsumerFactory<>(
+                configProps
+        );
     }
 
     // ============================================================
@@ -148,10 +189,13 @@ public class KafkaConfig {
             ConsumerFactory<String, String> consumerFactory
     ) {
 
-        ConcurrentKafkaListenerContainerFactory<String, String> factory =
+        ConcurrentKafkaListenerContainerFactory<String, String>
+                factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
 
-        factory.setConsumerFactory(consumerFactory);
+        factory.setConsumerFactory(
+                consumerFactory
+        );
 
         return factory;
     }

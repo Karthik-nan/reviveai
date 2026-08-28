@@ -228,36 +228,48 @@ public class SubscriptionHealthServiceImpl implements SubscriptionHealthService 
             BigDecimal amount
     ) {
 
-        // Default: high recovery probability
-        double score = 0.85;
+        double score;
 
-        // Hard decline
-        if (
-                "BAD_CARD_EXPIRED".equalsIgnoreCase(errorCode)
-                        || "CARD_BLOCKED".equalsIgnoreCase(errorCode)
-        ) {
+        if (errorCode == null || errorCode.isBlank()) {
 
-            score = 0.20;
+            score = 0.30;
 
+        } else {
+
+            switch (errorCode.toUpperCase()) {
+
+                case "INSUFFICIENT_FUNDS" ->
+                        score = 0.60;
+
+                case "CARD_DECLINED" ->
+                        score = 0.50;
+
+                case "CARD_EXPIRED",
+                     "BAD_CARD_EXPIRED",
+                     "CARD_BLOCKED" ->
+                        score = 0.20;
+
+                case "AUTHENTICATION_FAILED" ->
+                        score = 0.40;
+
+                default ->
+                        score = 0.30;
+            }
         }
 
-        // Temporary financial issue
-        else if (
-                "INSUFFICIENT_FUNDS".equalsIgnoreCase(errorCode)
-        ) {
-
-            score = 0.60;
-        }
-
-        // High-value payment adjustment
-        if (
-                amount.compareTo(BigDecimal.valueOf(10000)) > 0
-        ) {
+        /*
+         * High-value payments receive a small
+         * confidence reduction.
+         */
+        if (amount != null &&
+                amount.compareTo(BigDecimal.valueOf(10000)) > 0) {
 
             score -= 0.10;
         }
 
-        // Keep score between 0 and 1
+        /*
+         * Keep score within [0.00, 1.00].
+         */
         score = Math.max(
                 0.0,
                 Math.min(1.0, score)
