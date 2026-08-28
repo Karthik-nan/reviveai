@@ -1,15 +1,15 @@
-package com.reviveai.service;
+    package com.reviveai.service;
 
-import com.reviveai.entity.RecoveryAction;
-import com.reviveai.entity.SubscriptionHealth;
+    import com.reviveai.entity.RecoveryAction;
+    import com.reviveai.entity.SubscriptionHealth;
 
-public interface PreventiveRecoveryService {
+    public interface PreventiveRecoveryService {
 
-    boolean shouldTriggerPreventiveRecovery(
-            SubscriptionHealth health
-    );
+        boolean shouldTriggerPreventiveRecovery(
+                SubscriptionHealth health
+        );
 
-    RecoveryAction createPreventiveRecoveryAction(
-            SubscriptionHealth health
-    );
-}
+        RecoveryAction createPreventiveRecoveryAction(
+                SubscriptionHealth health
+        );
+    }

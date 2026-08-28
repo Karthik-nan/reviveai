@@ -4,6 +4,7 @@ import com.reviveai.dto.PaymentFailedEvent;
 import com.reviveai.entity.PaymentAttempt;
 import com.reviveai.entity.RecoveryCase;
 import com.reviveai.entity.Subscription;
+import com.reviveai.entity.SubscriptionHealth;
 import com.reviveai.ml.RecoveryFeatureMapper;
 import com.reviveai.ml.RecoveryPredictionRequest;
 import com.reviveai.ml.RecoveryPredictionResponse;
@@ -31,6 +32,8 @@ public class PaymentRecoveryService {
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final RecoveryCaseRepository recoveryCaseRepository;
 
+    private final SubscriptionHealthEvaluator subscriptionHealthEvaluator;
+
     private final RecoveryStrategyEngine recoveryStrategyEngine;
     private final RecoveryDecisionGuard recoveryDecisionGuard;
     private final RecoveryActionExecutor recoveryActionExecutor;
@@ -43,25 +46,34 @@ public class PaymentRecoveryService {
     private final RecoveryPredictionService recoveryPredictionService;
 
 
+    // =========================================================
+    // PROCESS PAYMENT FAILURE
+    // =========================================================
+
     @Transactional
-    public void processPaymentFailure(PaymentFailedEvent event) {
+    public void processPaymentFailure(
+            PaymentFailedEvent event
+    ) {
 
         // =========================================================
-        // 1. Validate event structure
+        // 1. VALIDATE EVENT
         // =========================================================
 
-        if (event == null ||
-                event.getPayload() == null ||
-                event.getPayload().getPayment() == null ||
-                event.getPayload().getPayment().getEntity() == null) {
+        if (event == null
+                || event.getPayload() == null
+                || event.getPayload().getPayment() == null
+                || event.getPayload().getPayment().getEntity() == null) {
 
-            log.warn("Ignoring invalid payment failure event");
+            log.warn(
+                    "Ignoring invalid payment failure event"
+            );
+
             return;
         }
 
 
         // =========================================================
-        // 2. Extract payment entity
+        // 2. EXTRACT PAYMENT ENTITY
         // =========================================================
 
         PaymentFailedEvent.Entity payment =
@@ -71,7 +83,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 3. Extract payment ID
+        // 3. EXTRACT PAYMENT ID
         // =========================================================
 
         String paymentId =
@@ -79,7 +91,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 4. Extract subscription ID
+        // 4. EXTRACT SUBSCRIPTION ID
         // =========================================================
 
         String subscriptionId =
@@ -87,8 +99,7 @@ public class PaymentRecoveryService {
 
 
         /*
-         * Razorpay subscription payment events may provide
-         * subscription information in:
+         * Razorpay may provide subscription information through:
          *
          * payload.payment.entity.subscription_id
          *
@@ -97,14 +108,12 @@ public class PaymentRecoveryService {
          * payload.subscription.entity.id
          */
 
-        if ((subscriptionId == null ||
-                subscriptionId.isBlank()) &&
-
-                event.getPayload().getSubscription() != null &&
-
-                event.getPayload()
-                        .getSubscription()
-                        .getEntity() != null) {
+        if ((subscriptionId == null
+                || subscriptionId.isBlank())
+                && event.getPayload().getSubscription() != null
+                && event.getPayload()
+                .getSubscription()
+                .getEntity() != null) {
 
             subscriptionId =
                     event.getPayload()
@@ -115,18 +124,19 @@ public class PaymentRecoveryService {
 
 
         log.info(
-                "Processing payment failure. paymentId={}, subscriptionId={}",
+                "Processing payment failure. " +
+                        "paymentId={}, subscriptionId={}",
                 paymentId,
                 subscriptionId
         );
 
 
         // =========================================================
-        // 5. Validate payment ID
+        // 5. VALIDATE PAYMENT ID
         // =========================================================
 
-        if (paymentId == null ||
-                paymentId.isBlank()) {
+        if (paymentId == null
+                || paymentId.isBlank()) {
 
             log.warn(
                     "Payment event does not contain payment ID"
@@ -137,14 +147,15 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 6. Validate subscription ID
+        // 6. VALIDATE SUBSCRIPTION ID
         // =========================================================
 
-        if (subscriptionId == null ||
-                subscriptionId.isBlank()) {
+        if (subscriptionId == null
+                || subscriptionId.isBlank()) {
 
             log.warn(
-                    "Payment event does not contain subscription ID. paymentId={}",
+                    "Payment event does not contain subscription ID. " +
+                            "paymentId={}",
                     paymentId
             );
 
@@ -153,7 +164,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 7. Payment idempotency check
+        // 7. IDEMPOTENCY CHECK
         // =========================================================
 
         if (paymentAttemptRepository
@@ -170,7 +181,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 8. Find subscription
+        // 8. FIND SUBSCRIPTION
         // =========================================================
 
         Subscription subscription =
@@ -184,7 +195,8 @@ public class PaymentRecoveryService {
         if (subscription == null) {
 
             log.warn(
-                    "Subscription not found. externalSubscriptionId={}, paymentId={}",
+                    "Subscription not found. " +
+                            "externalSubscriptionId={}, paymentId={}",
                     subscriptionId,
                     paymentId
             );
@@ -194,20 +206,22 @@ public class PaymentRecoveryService {
 
 
         log.info(
-                "Subscription found. internalId={}, externalSubscriptionId={}",
+                "Subscription found. " +
+                        "internalId={}, externalSubscriptionId={}",
                 subscription.getId(),
                 subscriptionId
         );
 
 
         // =========================================================
-        // 9. Validate amount
+        // 9. VALIDATE AMOUNT
         // =========================================================
 
         if (payment.getAmount() == null) {
 
             log.warn(
-                    "Payment event does not contain amount. paymentId={}",
+                    "Payment event does not contain amount. " +
+                            "paymentId={}",
                     paymentId
             );
 
@@ -216,10 +230,11 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 10. Convert Razorpay amount
+        // 10. CONVERT RAZORPAY AMOUNT
         // =========================================================
+
         /*
-         * Razorpay sends amount in the smallest currency unit.
+         * Razorpay sends amounts in the smallest currency unit.
          *
          * Example:
          *
@@ -233,14 +248,15 @@ public class PaymentRecoveryService {
 
 
         log.info(
-                "Payment amount converted. paymentId={}, amount={}",
+                "Payment amount converted. " +
+                        "paymentId={}, amount={}",
                 paymentId,
                 amount
         );
 
 
         // =========================================================
-        // 11. Create PaymentAttempt
+        // 11. CREATE PAYMENT ATTEMPT
         // =========================================================
 
         PaymentAttempt paymentAttempt =
@@ -268,14 +284,15 @@ public class PaymentRecoveryService {
 
 
         log.info(
-                "PaymentAttempt created. id={}, paymentId={}",
+                "PaymentAttempt created. " +
+                        "id={}, paymentId={}",
                 paymentAttempt.getId(),
                 paymentId
         );
 
 
         // =========================================================
-        // 12. Mark subscription as PAST_DUE
+        // 12. MARK SUBSCRIPTION PAST DUE
         // =========================================================
 
         subscription.setStatus(
@@ -296,24 +313,53 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 13. Determine recovery potential
+        // 13. EVALUATE SUBSCRIPTION HEALTH
+        // =========================================================
+
+        SubscriptionHealth health =
+                subscriptionHealthEvaluator.evaluateHealth(
+                        subscription
+                );
+
+
+        if (health == null) {
+
+            log.warn(
+                    "Subscription health evaluation returned null. " +
+                            "subscriptionId={}",
+                    subscription.getId()
+            );
+
+        } else {
+
+            log.info(
+                    "Subscription health evaluated. " +
+                            "subscriptionId={}, healthScore={}, " +
+                            "riskLevel={}, consecutiveFailures={}, " +
+                            "recentFailures={}, behaviorDeclining={}",
+                    subscription.getId(),
+                    health.getHealthScore(),
+                    health.getRiskLevel(),
+                    health.getConsecutiveFailures(),
+                    health.getRecentFailureCount(),
+                    health.getPaymentBehaviorDeclining()
+            );
+        }
+
+
+        // =========================================================
+        // 14. DETERMINE RECOVERY POTENTIAL
         // =========================================================
 
         RecoveryCase.RecoveryPotential recoveryPotential =
-                determineRecoveryPotential(amount);
+                determineRecoveryPotential(
+                        amount
+                );
 
 
         // =========================================================
-        // 14. Create RecoveryCase
+        // 15. CREATE RECOVERY CASE
         // =========================================================
-        /*
-         * The recovery score is intentionally not calculated
-         * here anymore.
-         *
-         * Tier 2 ML needs the complete RecoveryCase so that
-         * RecoveryFeatureMapper can calculate historical
-         * payment features.
-         */
 
         RecoveryCase recoveryCase =
                 RecoveryCase.builder()
@@ -325,7 +371,9 @@ public class PaymentRecoveryService {
                         .recoveryPotential(
                                 recoveryPotential
                         )
-                        .amountAtRisk(amount)
+                        .amountAtRisk(
+                                amount
+                        )
                         .amountRecovered(
                                 BigDecimal.ZERO
                         )
@@ -340,7 +388,8 @@ public class PaymentRecoveryService {
 
         log.info(
                 "RecoveryCase created. " +
-                        "recoveryCaseId={}, paymentId={}, amountAtRisk={}, potential={}",
+                        "recoveryCaseId={}, paymentId={}, " +
+                        "amountAtRisk={}, potential={}",
                 recoveryCase.getId(),
                 paymentId,
                 amount,
@@ -349,7 +398,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 15. Build Tier 2 ML feature request
+        // 16. BUILD TIER 2 ML FEATURES
         // =========================================================
 
         RecoveryPredictionRequest predictionRequest =
@@ -360,8 +409,9 @@ public class PaymentRecoveryService {
 
         log.info(
                 "Tier 2 ML features generated. " +
-                        "recoveryCaseId={}, paymentAmount={}, retryCount={}, " +
-                        "daysPastDue={}, previousSuccessfulPayments={}, " +
+                        "recoveryCaseId={}, paymentAmount={}, " +
+                        "retryCount={}, daysPastDue={}, " +
+                        "previousSuccessfulPayments={}, " +
                         "previousFailedPayments={}, failureRate={}, " +
                         "recoveryPotential={}, errorCode={}",
                 recoveryCase.getId(),
@@ -377,7 +427,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 16. Run Tier 2 prediction
+        // 17. RUN TIER 2 ML PREDICTION
         // =========================================================
 
         RecoveryPredictionResponse prediction =
@@ -414,7 +464,8 @@ public class PaymentRecoveryService {
         if (recoveryScore == null) {
 
             log.warn(
-                    "Tier 2 ML prediction returned null recovery probability. " +
+                    "Tier 2 ML prediction returned null " +
+                            "recovery probability. " +
                             "recoveryCaseId={}, paymentId={}",
                     recoveryCase.getId(),
                     paymentId
@@ -433,7 +484,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 17. Store ML recovery score
+        // 18. STORE ML RECOVERY SCORE
         // =========================================================
 
         recoveryCase.setRecoveryScore(
@@ -459,7 +510,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 18. Determine recovery strategy
+        // 19. DETERMINE RECOVERY STRATEGY
         // =========================================================
 
         RecoveryDecision decision =
@@ -491,11 +542,8 @@ public class PaymentRecoveryService {
 
         log.info(
                 "Recovery strategy determined. " +
-                        "recoveryCaseId={}, " +
-                        "paymentId={}, " +
-                        "strategy={}, " +
-                        "priority={}, " +
-                        "score={}",
+                        "recoveryCaseId={}, paymentId={}, " +
+                        "strategy={}, priority={}, score={}",
                 recoveryCase.getId(),
                 paymentId,
                 decision.getStrategy(),
@@ -505,7 +553,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 19. Validate recovery decision
+        // 20. VALIDATE RECOVERY DECISION
         // =========================================================
 
         RecoveryDecisionGuard.GuardResult guardResult =
@@ -547,7 +595,7 @@ public class PaymentRecoveryService {
 
 
         // =========================================================
-        // 20. Execute recovery action
+        // 21. EXECUTE RECOVERY ACTION
         // =========================================================
 
         recoveryActionExecutor.execute(
@@ -566,7 +614,7 @@ public class PaymentRecoveryService {
 
 
     // =============================================================
-    // Recovery Potential
+    // RECOVERY POTENTIAL
     // =============================================================
 
     private RecoveryCase.RecoveryPotential
@@ -614,3 +662,4 @@ public class PaymentRecoveryService {
         return RecoveryCase.RecoveryPotential.LOW;
     }
 }
+

@@ -31,10 +31,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-
 @ExtendWith(MockitoExtension.class)
 class PaymentRecoveryServiceTest {
-
 
     // ============================================================
     // REPOSITORIES
@@ -49,6 +47,12 @@ class PaymentRecoveryServiceTest {
     @Mock
     private RecoveryCaseRepository recoveryCaseRepository;
 
+    // ============================================================
+    // HEALTH EVALUATION
+    // ============================================================
+
+    @Mock
+    private SubscriptionHealthEvaluator subscriptionHealthEvaluator;
 
     // ============================================================
     // RECOVERY ENGINE
@@ -63,7 +67,6 @@ class PaymentRecoveryServiceTest {
     @Mock
     private RecoveryActionExecutor recoveryActionExecutor;
 
-
     // ============================================================
     // ML
     // ============================================================
@@ -74,14 +77,12 @@ class PaymentRecoveryServiceTest {
     @Mock
     private RecoveryPredictionService recoveryPredictionService;
 
-
     // ============================================================
     // SERVICE UNDER TEST
     // ============================================================
 
     @InjectMocks
     private PaymentRecoveryService paymentRecoveryService;
-
 
     // ============================================================
     // HELPER: CREATE PAYMENT
@@ -104,16 +105,13 @@ class PaymentRecoveryServiceTest {
         entity.setErrorCode(errorCode);
         entity.setErrorDescription(errorDescription);
 
-
         PaymentFailedEvent.Payment payment =
                 new PaymentFailedEvent.Payment();
 
         payment.setEntity(entity);
 
-
         return payment;
     }
-
 
     // ============================================================
     // HELPER: CREATE EVENT
@@ -128,16 +126,13 @@ class PaymentRecoveryServiceTest {
 
         payload.setPayment(payment);
 
-
         PaymentFailedEvent event =
                 new PaymentFailedEvent();
 
         event.setPayload(payload);
 
-
         return event;
     }
-
 
     // ============================================================
     // 1. SUCCESSFUL PAYMENT FAILURE PROCESSING
@@ -145,11 +140,6 @@ class PaymentRecoveryServiceTest {
 
     @Test
     void shouldProcessPaymentFailure() {
-
-
-        // ========================================================
-        // Payment event
-        // ========================================================
 
         PaymentFailedEvent.Payment payment =
                 createPayment(
@@ -160,14 +150,8 @@ class PaymentRecoveryServiceTest {
                         "Insufficient funds"
                 );
 
-
         PaymentFailedEvent event =
                 createEvent(payment);
-
-
-        // ========================================================
-        // IDs
-        // ========================================================
 
         UUID subscriptionId =
                 UUID.randomUUID();
@@ -177,7 +161,6 @@ class PaymentRecoveryServiceTest {
 
         UUID recoveryCaseId =
                 UUID.randomUUID();
-
 
         // ========================================================
         // Subscription
@@ -190,7 +173,6 @@ class PaymentRecoveryServiceTest {
                                 "sub_test_001"
                         )
                         .build();
-
 
         // ========================================================
         // Payment attempt
@@ -220,7 +202,6 @@ class PaymentRecoveryServiceTest {
                         )
                         .build();
 
-
         // ========================================================
         // Recovery case
         // ========================================================
@@ -249,7 +230,6 @@ class PaymentRecoveryServiceTest {
                         )
                         .build();
 
-
         // ========================================================
         // ML feature request
         // ========================================================
@@ -274,9 +254,8 @@ class PaymentRecoveryServiceTest {
                         )
                         .build();
 
-
         // ========================================================
-        // ML prediction response
+        // ML prediction
         // ========================================================
 
         RecoveryPredictionResponse predictionResponse =
@@ -291,7 +270,6 @@ class PaymentRecoveryServiceTest {
                                 "Tier 2 baseline prediction"
                         )
                         .build();
-
 
         // ========================================================
         // Recovery decision
@@ -313,7 +291,6 @@ class PaymentRecoveryServiceTest {
                         )
                         .build();
 
-
         // ========================================================
         // MOCK: payment idempotency
         // ========================================================
@@ -326,7 +303,6 @@ class PaymentRecoveryServiceTest {
         ).thenReturn(
                 Optional.empty()
         );
-
 
         // ========================================================
         // MOCK: subscription lookup
@@ -341,7 +317,6 @@ class PaymentRecoveryServiceTest {
                 Optional.of(subscription)
         );
 
-
         // ========================================================
         // MOCK: payment attempt save
         // ========================================================
@@ -354,19 +329,8 @@ class PaymentRecoveryServiceTest {
                 savedPaymentAttempt
         );
 
-
         // ========================================================
         // MOCK: recovery case save
-        //
-        // IMPORTANT:
-        //
-        // The current PaymentRecoveryService saves the
-        // RecoveryCase twice:
-        //
-        // 1. Initial RecoveryCase creation
-        // 2. After Tier-2 ML prediction updates score
-        //
-        // Returning the same object is sufficient for this unit test.
         // ========================================================
 
         when(
@@ -376,7 +340,6 @@ class PaymentRecoveryServiceTest {
         ).thenReturn(
                 savedRecoveryCase
         );
-
 
         // ========================================================
         // MOCK: ML feature mapper
@@ -390,9 +353,8 @@ class PaymentRecoveryServiceTest {
                 predictionRequest
         );
 
-
         // ========================================================
-        // MOCK: ML prediction service
+        // MOCK: ML prediction
         // ========================================================
 
         when(
@@ -402,7 +364,6 @@ class PaymentRecoveryServiceTest {
         ).thenReturn(
                 predictionResponse
         );
-
 
         // ========================================================
         // MOCK: strategy engine
@@ -415,7 +376,6 @@ class PaymentRecoveryServiceTest {
         ).thenReturn(
                 recoveryDecision
         );
-
 
         // ========================================================
         // MOCK: decision guard
@@ -435,7 +395,6 @@ class PaymentRecoveryServiceTest {
                         .build()
         );
 
-
         // ========================================================
         // EXECUTE
         // ========================================================
@@ -443,9 +402,8 @@ class PaymentRecoveryServiceTest {
         paymentRecoveryService
                 .processPaymentFailure(event);
 
-
         // ========================================================
-        // VERIFY: payment idempotency
+        // VERIFY
         // ========================================================
 
         verify(
@@ -455,22 +413,12 @@ class PaymentRecoveryServiceTest {
                 "pay_test_001"
         );
 
-
-        // ========================================================
-        // VERIFY: subscription lookup
-        // ========================================================
-
         verify(
                 subscriptionRepository,
                 times(1)
         ).findByExternalSubscriptionId(
                 "sub_test_001"
         );
-
-
-        // ========================================================
-        // VERIFY: payment attempt
-        // ========================================================
 
         verify(
                 paymentAttemptRepository,
@@ -479,24 +427,12 @@ class PaymentRecoveryServiceTest {
                 any(PaymentAttempt.class)
         );
 
-
-        // ========================================================
-        // VERIFY: subscription update
-        // ========================================================
-
         verify(
                 subscriptionRepository,
                 times(1)
         ).save(
                 subscription
         );
-
-
-        // ========================================================
-        // VERIFY: recovery case
-        //
-        // TWO saves are expected.
-        // ========================================================
 
         verify(
                 recoveryCaseRepository,
@@ -505,22 +441,12 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class)
         );
 
-
-        // ========================================================
-        // VERIFY: ML feature mapping
-        // ========================================================
-
         verify(
                 recoveryFeatureMapper,
                 times(1)
         ).map(
                 any(RecoveryCase.class)
         );
-
-
-        // ========================================================
-        // VERIFY: ML prediction
-        // ========================================================
 
         verify(
                 recoveryPredictionService,
@@ -529,22 +455,12 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryPredictionRequest.class)
         );
 
-
-        // ========================================================
-        // VERIFY: strategy engine
-        // ========================================================
-
         verify(
                 recoveryStrategyEngine,
                 times(1)
         ).determineStrategy(
                 any(RecoveryCase.class)
         );
-
-
-        // ========================================================
-        // VERIFY: decision guard
-        // ========================================================
 
         verify(
                 recoveryDecisionGuard,
@@ -554,11 +470,6 @@ class PaymentRecoveryServiceTest {
                 eq(recoveryDecision)
         );
 
-
-        // ========================================================
-        // VERIFY: action executor
-        // ========================================================
-
         verify(
                 recoveryActionExecutor,
                 times(1)
@@ -566,8 +477,15 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class),
                 eq(recoveryDecision)
         );
-    }
 
+        // Health evaluation is now part of payment recovery.
+        verify(
+                subscriptionHealthEvaluator,
+                times(1)
+        ).evaluateHealth(
+                subscription
+        );
+    }
 
     // ============================================================
     // 2. DUPLICATE PAYMENT
@@ -575,7 +493,6 @@ class PaymentRecoveryServiceTest {
 
     @Test
     void shouldIgnoreDuplicatePayment() {
-
 
         PaymentFailedEvent.Payment payment =
                 createPayment(
@@ -586,10 +503,8 @@ class PaymentRecoveryServiceTest {
                         "Insufficient funds"
                 );
 
-
         PaymentFailedEvent event =
                 createEvent(payment);
-
 
         PaymentAttempt existingPayment =
                 PaymentAttempt.builder()
@@ -602,7 +517,6 @@ class PaymentRecoveryServiceTest {
                         )
                         .build();
 
-
         when(
                 paymentAttemptRepository
                         .findByIdempotencyKey(
@@ -612,10 +526,8 @@ class PaymentRecoveryServiceTest {
                 Optional.of(existingPayment)
         );
 
-
         paymentRecoveryService
                 .processPaymentFailure(event);
-
 
         verify(
                 paymentAttemptRepository,
@@ -624,14 +536,12 @@ class PaymentRecoveryServiceTest {
                 "pay_duplicate"
         );
 
-
         verify(
                 paymentAttemptRepository,
                 never()
         ).save(
                 any(PaymentAttempt.class)
         );
-
 
         verify(
                 recoveryCaseRepository,
@@ -640,7 +550,6 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class)
         );
 
-
         verify(
                 subscriptionRepository,
                 never()
@@ -648,6 +557,12 @@ class PaymentRecoveryServiceTest {
                 any(Subscription.class)
         );
 
+        verify(
+                subscriptionHealthEvaluator,
+                never()
+        ).evaluateHealth(
+                any(Subscription.class)
+        );
 
         verify(
                 recoveryFeatureMapper,
@@ -656,14 +571,12 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class)
         );
 
-
         verify(
                 recoveryPredictionService,
                 never()
         ).predict(
                 any(RecoveryPredictionRequest.class)
         );
-
 
         verify(
                 recoveryStrategyEngine,
@@ -672,7 +585,6 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class)
         );
 
-
         verify(
                 recoveryDecisionGuard,
                 never()
@@ -680,7 +592,6 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class),
                 any(RecoveryDecision.class)
         );
-
 
         verify(
                 recoveryActionExecutor,
@@ -691,7 +602,6 @@ class PaymentRecoveryServiceTest {
         );
     }
 
-
     // ============================================================
     // 3. NULL EVENT
     // ============================================================
@@ -699,15 +609,14 @@ class PaymentRecoveryServiceTest {
     @Test
     void shouldIgnoreInvalidEvent() {
 
-
         paymentRecoveryService
                 .processPaymentFailure(null);
-
 
         verifyNoInteractions(
                 paymentAttemptRepository,
                 subscriptionRepository,
                 recoveryCaseRepository,
+                subscriptionHealthEvaluator,
                 recoveryStrategyEngine,
                 recoveryDecisionGuard,
                 recoveryFeatureMapper,
@@ -715,7 +624,6 @@ class PaymentRecoveryServiceTest {
                 recoveryActionExecutor
         );
     }
-
 
     // ============================================================
     // 4. MISSING PAYLOAD
@@ -724,19 +632,17 @@ class PaymentRecoveryServiceTest {
     @Test
     void shouldIgnoreEventWhenPayloadIsMissing() {
 
-
         PaymentFailedEvent event =
                 new PaymentFailedEvent();
 
-
         paymentRecoveryService
                 .processPaymentFailure(event);
-
 
         verifyNoInteractions(
                 paymentAttemptRepository,
                 subscriptionRepository,
                 recoveryCaseRepository,
+                subscriptionHealthEvaluator,
                 recoveryStrategyEngine,
                 recoveryDecisionGuard,
                 recoveryFeatureMapper,
@@ -744,7 +650,6 @@ class PaymentRecoveryServiceTest {
                 recoveryActionExecutor
         );
     }
-
 
     // ============================================================
     // 5. MISSING PAYMENT
@@ -753,25 +658,22 @@ class PaymentRecoveryServiceTest {
     @Test
     void shouldIgnoreEventWhenPaymentIsMissing() {
 
-
         PaymentFailedEvent.Payload payload =
                 new PaymentFailedEvent.Payload();
-
 
         PaymentFailedEvent event =
                 new PaymentFailedEvent();
 
         event.setPayload(payload);
 
-
         paymentRecoveryService
                 .processPaymentFailure(event);
-
 
         verifyNoInteractions(
                 paymentAttemptRepository,
                 subscriptionRepository,
                 recoveryCaseRepository,
+                subscriptionHealthEvaluator,
                 recoveryStrategyEngine,
                 recoveryDecisionGuard,
                 recoveryFeatureMapper,
@@ -779,7 +681,6 @@ class PaymentRecoveryServiceTest {
                 recoveryActionExecutor
         );
     }
-
 
     // ============================================================
     // 6. MISSING PAYMENT ID
@@ -788,7 +689,6 @@ class PaymentRecoveryServiceTest {
     @Test
     void shouldIgnorePaymentWhenPaymentIdIsMissing() {
 
-
         PaymentFailedEvent.Entity entity =
                 new PaymentFailedEvent.Entity();
 
@@ -796,25 +696,22 @@ class PaymentRecoveryServiceTest {
                 "sub_test_001"
         );
 
-
         PaymentFailedEvent.Payment payment =
                 new PaymentFailedEvent.Payment();
 
         payment.setEntity(entity);
 
-
         PaymentFailedEvent event =
                 createEvent(payment);
 
-
         paymentRecoveryService
                 .processPaymentFailure(event);
-
 
         verifyNoInteractions(
                 paymentAttemptRepository,
                 subscriptionRepository,
                 recoveryCaseRepository,
+                subscriptionHealthEvaluator,
                 recoveryStrategyEngine,
                 recoveryDecisionGuard,
                 recoveryFeatureMapper,
@@ -822,7 +719,6 @@ class PaymentRecoveryServiceTest {
                 recoveryActionExecutor
         );
     }
-
 
     // ============================================================
     // 7. MISSING SUBSCRIPTION ID
@@ -831,7 +727,6 @@ class PaymentRecoveryServiceTest {
     @Test
     void shouldIgnorePaymentWhenSubscriptionIdIsMissing() {
 
-
         PaymentFailedEvent.Entity entity =
                 new PaymentFailedEvent.Entity();
 
@@ -839,25 +734,22 @@ class PaymentRecoveryServiceTest {
                 "pay_test_001"
         );
 
-
         PaymentFailedEvent.Payment payment =
                 new PaymentFailedEvent.Payment();
 
         payment.setEntity(entity);
 
-
         PaymentFailedEvent event =
                 createEvent(payment);
 
-
         paymentRecoveryService
                 .processPaymentFailure(event);
-
 
         verifyNoInteractions(
                 paymentAttemptRepository,
                 subscriptionRepository,
                 recoveryCaseRepository,
+                subscriptionHealthEvaluator,
                 recoveryStrategyEngine,
                 recoveryDecisionGuard,
                 recoveryFeatureMapper,
@@ -866,14 +758,12 @@ class PaymentRecoveryServiceTest {
         );
     }
 
-
     // ============================================================
     // 8. SUBSCRIPTION DOES NOT EXIST
     // ============================================================
 
     @Test
     void shouldIgnorePaymentWhenSubscriptionDoesNotExist() {
-
 
         PaymentFailedEvent.Payment payment =
                 createPayment(
@@ -884,14 +774,8 @@ class PaymentRecoveryServiceTest {
                         "Card declined"
                 );
 
-
         PaymentFailedEvent event =
                 createEvent(payment);
-
-
-        // ========================================================
-        // Mock idempotency
-        // ========================================================
 
         when(
                 paymentAttemptRepository
@@ -902,11 +786,6 @@ class PaymentRecoveryServiceTest {
                 Optional.empty()
         );
 
-
-        // ========================================================
-        // Mock missing subscription
-        // ========================================================
-
         when(
                 subscriptionRepository
                         .findByExternalSubscriptionId(
@@ -916,18 +795,8 @@ class PaymentRecoveryServiceTest {
                 Optional.empty()
         );
 
-
-        // ========================================================
-        // Execute
-        // ========================================================
-
         paymentRecoveryService
                 .processPaymentFailure(event);
-
-
-        // ========================================================
-        // Verify subscription lookup
-        // ========================================================
 
         verify(
                 subscriptionRepository,
@@ -936,18 +805,12 @@ class PaymentRecoveryServiceTest {
                 "sub_missing"
         );
 
-
-        // ========================================================
-        // Nothing after subscription lookup should execute
-        // ========================================================
-
         verify(
                 paymentAttemptRepository,
                 never()
         ).save(
                 any(PaymentAttempt.class)
         );
-
 
         verify(
                 recoveryCaseRepository,
@@ -956,7 +819,6 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class)
         );
 
-
         verify(
                 subscriptionRepository,
                 never()
@@ -964,6 +826,12 @@ class PaymentRecoveryServiceTest {
                 any(Subscription.class)
         );
 
+        verify(
+                subscriptionHealthEvaluator,
+                never()
+        ).evaluateHealth(
+                any(Subscription.class)
+        );
 
         verify(
                 recoveryFeatureMapper,
@@ -972,14 +840,12 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class)
         );
 
-
         verify(
                 recoveryPredictionService,
                 never()
         ).predict(
                 any(RecoveryPredictionRequest.class)
         );
-
 
         verify(
                 recoveryStrategyEngine,
@@ -988,7 +854,6 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class)
         );
 
-
         verify(
                 recoveryDecisionGuard,
                 never()
@@ -996,7 +861,6 @@ class PaymentRecoveryServiceTest {
                 any(RecoveryCase.class),
                 any(RecoveryDecision.class)
         );
-
 
         verify(
                 recoveryActionExecutor,
@@ -1007,3 +871,4 @@ class PaymentRecoveryServiceTest {
         );
     }
 }
+
