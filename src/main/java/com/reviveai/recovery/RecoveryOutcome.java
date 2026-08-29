@@ -17,6 +17,8 @@ public class RecoveryOutcome {
 
     public enum OutcomeStatus {
 
+        SUBMITTED,
+
         RECOVERED,
 
         FAILED

@@ -85,7 +85,6 @@ public class RecoveryActionExecutor {
             );
         }
 
-
         // =====================================================
         // 2. VALIDATE DECISION
         // =====================================================
@@ -96,7 +95,6 @@ public class RecoveryActionExecutor {
                     "Recovery decision cannot be null"
             );
         }
-
 
         // =====================================================
         // 3. VALIDATE DECISION WITH SAFETY GUARD
@@ -128,14 +126,12 @@ public class RecoveryActionExecutor {
             return;
         }
 
-
         // =====================================================
         // 4. EXTRACT STRATEGY
         // =====================================================
 
         RecoveryStrategy strategy =
                 decision.getStrategy();
-
 
         // =====================================================
         // 5. DEFENSIVE STRATEGY VALIDATION
@@ -152,7 +148,6 @@ public class RecoveryActionExecutor {
             return;
         }
 
-
         log.info(
                 "Preparing recovery action. " +
                         "recoveryCaseId={}, strategy={}, priority={}, score={}",
@@ -161,7 +156,6 @@ public class RecoveryActionExecutor {
                 decision.getPriority(),
                 decision.getRecoveryScore()
         );
-
 
         // =====================================================
         // 6. FIND EXISTING ACTION
@@ -174,12 +168,10 @@ public class RecoveryActionExecutor {
                                 strategy
                         );
 
-
         if (existingAction.isPresent()) {
 
             RecoveryAction action =
                     existingAction.get();
-
 
             // =================================================
             // 6A. ALREADY EXECUTED
@@ -200,7 +192,6 @@ public class RecoveryActionExecutor {
                 return;
             }
 
-
             // =================================================
             // 6B. ALREADY PENDING
             // =================================================
@@ -220,7 +211,6 @@ public class RecoveryActionExecutor {
                 return;
             }
 
-
             // =================================================
             // 6C. PREVIOUS ACTION FAILED
             // =================================================
@@ -239,7 +229,6 @@ public class RecoveryActionExecutor {
                     strategy
             );
         }
-
 
         // =====================================================
         // 7. CREATE RECOVERY ACTION
@@ -261,12 +250,10 @@ public class RecoveryActionExecutor {
                         )
                         .build();
 
-
         recoveryAction =
                 recoveryActionRepository.save(
                         recoveryAction
                 );
-
 
         log.info(
                 "Recovery action created. " +
@@ -276,21 +263,44 @@ public class RecoveryActionExecutor {
                 strategy
         );
 
-
         // =====================================================
         // 8. EXECUTE STRATEGY-SPECIFIC HANDLER
         // =====================================================
 
         try {
 
-            executeAction(
-                    recoveryCase,
-                    decision
-            );
-
+            RecoveryOutcome outcome =
+                    executeAction(
+                            recoveryCase,
+                            decision
+                    );
 
             // =================================================
-            // 9. MARK ACTION AS EXECUTED
+            // 9. VALIDATE OUTCOME
+            // =================================================
+
+            if (outcome == null) {
+
+                throw new IllegalStateException(
+                        "Recovery action handler returned null outcome. " +
+                                "recoveryCaseId=" + recoveryCase.getId() +
+                                ", strategy=" + strategy
+                );
+            }
+
+            log.info(
+                    "Recovery outcome received. " +
+                            "recoveryCaseId={}, strategy={}, status={}, " +
+                            "amountRecovered={}, reason={}",
+                    recoveryCase.getId(),
+                    strategy,
+                    outcome.getStatus(),
+                    outcome.getAmountRecovered(),
+                    outcome.getReason()
+            );
+
+            // =================================================
+            // 10. MARK ACTION AS EXECUTED
             // =================================================
 
             recoveryAction.setStatus(
@@ -305,43 +315,95 @@ public class RecoveryActionExecutor {
                     recoveryAction
             );
 
-
             // =================================================
-            // 10. MOVE RECOVERY CASE TO IN_PROGRESS
+            // 11. HANDLE RECOVERY OUTCOME
             // =================================================
 
             /*
-             * The recovery action was successfully dispatched.
+             * IMPORTANT:
              *
-             * It is NOT yet marked RECOVERED because the actual
-             * payment result has not been received.
+             * The action being executed successfully does NOT
+             * necessarily mean the payment was recovered.
              *
-             * Example:
+             * For example:
              *
              * RetryPaymentHandler
              *       ↓
-             * Razorpay retry request
+             * Retry request submitted
              *       ↓
-             * Payment webhook
+             * Payment provider processes request
+             *       ↓
+             * Webhook
              *       ↓
              * RECOVERED / FAILED
+             *
+             * Therefore the current retry handler leaves the
+             * recovery case IN_PROGRESS.
              */
 
-            recoveryCase.setStatus(
-                    RecoveryCase.RecoveryStatus.IN_PROGRESS
-            );
+            if (outcome.getStatus()
+                    == RecoveryOutcome.OutcomeStatus.RECOVERED) {
 
+                recoveryCase.setStatus(
+                        RecoveryCase.RecoveryStatus.RECOVERED
+                );
 
+                log.info(
+                        "Recovery case marked RECOVERED. " +
+                                "recoveryCaseId={}, strategy={}, " +
+                                "amountRecovered={}",
+                        recoveryCase.getId(),
+                        strategy,
+                        outcome.getAmountRecovered()
+                );
+
+            } else if (outcome.getStatus()
+                    == RecoveryOutcome.OutcomeStatus.SUBMITTED) {
+
+                /*
+                 * The recovery action was successfully submitted,
+                 * but the payment provider has not returned the
+                 * final payment result yet.
+                 *
+                 * The RecoveryCase remains IN_PROGRESS until a
+                 * payment-success or payment-failure event is received.
+                 */
+
+                recoveryCase.setStatus(
+                        RecoveryCase.RecoveryStatus.IN_PROGRESS
+                );
+
+                log.info(
+                        "Recovery action submitted. " +
+                                "Recovery case remains IN_PROGRESS " +
+                                "awaiting payment provider result. " +
+                                "recoveryCaseId={}, strategy={}, reason={}",
+                        recoveryCase.getId(),
+                        strategy,
+                        outcome.getReason()
+                );
+
+            } else if (outcome.getStatus()
+                    == RecoveryOutcome.OutcomeStatus.FAILED) {
+
+                /*
+                 * This represents an actual recovery failure.
+                 */
+
+                recoveryCase.setStatus(
+                        RecoveryCase.RecoveryStatus.FAILED
+                );
+
+                log.info(
+                        "Recovery action failed. " +
+                                "recoveryCaseId={}, strategy={}, reason={}",
+                        recoveryCase.getId(),
+                        strategy,
+                        outcome.getReason()
+                );
+            }
             log.info(
-                    "Recovery case moved to IN_PROGRESS. " +
-                            "recoveryCaseId={}, strategy={}",
-                    recoveryCase.getId(),
-                    strategy
-            );
-
-
-            log.info(
-                    "Recovery action executed successfully. " +
+                    "Recovery action execution completed. " +
                             "actionId={}, recoveryCaseId={}, strategy={}",
                     recoveryAction.getId(),
                     recoveryCase.getId(),
@@ -351,7 +413,7 @@ public class RecoveryActionExecutor {
         } catch (Exception exception) {
 
             // =================================================
-            // 11. MARK ACTION AS FAILED
+            // 12. MARK ACTION AS FAILED
             // =================================================
 
             recoveryAction.setStatus(
@@ -362,15 +424,13 @@ public class RecoveryActionExecutor {
                     recoveryAction
             );
 
-
             // =================================================
-            // 12. MARK RECOVERY CASE AS FAILED
+            // 13. MARK RECOVERY CASE AS FAILED
             // =================================================
 
             recoveryCase.setStatus(
                     RecoveryCase.RecoveryStatus.FAILED
             );
-
 
             log.error(
                     "Recovery action execution failed. " +
@@ -381,7 +441,6 @@ public class RecoveryActionExecutor {
                     exception
             );
 
-
             /*
              * Propagate the exception so the caller knows
              * that recovery execution failed.
@@ -391,7 +450,6 @@ public class RecoveryActionExecutor {
         }
     }
 
-
     // =========================================================
     // EXECUTE STRATEGY HANDLER
     // =========================================================
@@ -399,8 +457,10 @@ public class RecoveryActionExecutor {
     /**
      * Finds the handler registered for the selected recovery
      * strategy and delegates execution to it.
+     *
+     * @return outcome returned by the strategy handler
      */
-    private void executeAction(
+    private RecoveryOutcome executeAction(
             RecoveryCase recoveryCase,
             RecoveryDecision decision
     ) {
@@ -408,14 +468,12 @@ public class RecoveryActionExecutor {
         RecoveryStrategy strategy =
                 decision.getStrategy();
 
-
         // =====================================================
         // FIND HANDLER
         // =====================================================
 
         RecoveryActionHandler handler =
                 handlers.get(strategy);
-
 
         // =====================================================
         // VALIDATE HANDLER
@@ -429,7 +487,6 @@ public class RecoveryActionExecutor {
             );
         }
 
-
         log.info(
                 "Executing recovery action handler. " +
                         "strategy={}, recoveryCaseId={}, handler={}",
@@ -438,15 +495,13 @@ public class RecoveryActionExecutor {
                 handler.getClass().getSimpleName()
         );
 
-
         // =====================================================
         // EXECUTE HANDLER
         // =====================================================
 
-        handler.handle(
+        return handler.handle(
                 recoveryCase,
                 decision
         );
     }
 }
-

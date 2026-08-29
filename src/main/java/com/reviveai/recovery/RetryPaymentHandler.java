@@ -4,6 +4,8 @@ import com.reviveai.entity.RecoveryCase;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
 @Slf4j
 @Component
 public class RetryPaymentHandler implements RecoveryActionHandler {
@@ -14,7 +16,7 @@ public class RetryPaymentHandler implements RecoveryActionHandler {
     }
 
     @Override
-    public void handle(
+    public RecoveryOutcome handle(
             RecoveryCase recoveryCase,
             RecoveryDecision decision
     ) {
@@ -135,24 +137,38 @@ public class RetryPaymentHandler implements RecoveryActionHandler {
                 decision.getPriority()
         );
 
+        // ---------------------------------------------------------
+        // 8. Current implementation
+        // ---------------------------------------------------------
+
         /*
          * IMPORTANT:
-         * No external payment retry is performed yet.
          *
-         * The RecoveryActionExecutor will mark the action
-         * as EXECUTED because the handler completed successfully.
+         * Razorpay retry is not integrated yet.
          *
-         * When Razorpay integration is added, this handler should
-         * only return successfully after the retry request has been
-         * successfully submitted.
+         * Therefore we must NOT report the payment as RECOVERED.
+         *
+         * The recovery action itself was successfully dispatched,
+         * but the actual payment result is still unknown.
+         *
+         * The RecoveryCase should remain IN_PROGRESS until a
+         * payment-success or payment-failure event is received.
          */
 
         log.info(
-                "Retry payment handler completed successfully. " +
+                "Retry payment handler completed. " +
+                        "Payment provider integration pending. " +
                         "paymentId={}, recoveryCaseId={}",
                 paymentId,
                 recoveryCase.getId()
         );
+
+        return new RecoveryOutcome(
+                RecoveryOutcome.OutcomeStatus.SUBMITTED,
+                BigDecimal.ZERO,
+                "Payment retry request has not yet been integrated " +
+                        "with Razorpay. Execution boundary reached; " +
+                        "awaiting payment provider integration."
+        );
     }
 }
-

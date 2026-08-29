@@ -1,6 +1,7 @@
 package com.reviveai.kafka;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.reviveai.config.KafkaConfig;
 import com.reviveai.dto.PaymentFailedEvent;
 import com.reviveai.service.IdempotencyService;
 import com.reviveai.service.PaymentRecoveryService;
@@ -18,8 +19,12 @@ public class PaymentEventConsumer {
     private final PaymentRecoveryService paymentRecoveryService;
     private final IdempotencyService idempotencyService;
 
+    // ============================================================
+    // KAFKA LISTENER
+    // ============================================================
+
     @KafkaListener(
-            topics = "payment.events.test",
+            topics = KafkaConfig.RAW_PAYMENT_EVENTS_TOPIC,
             groupId = "reviveai-recovery-group"
     )
     public void consumePaymentEvent(String message) {
@@ -28,11 +33,14 @@ public class PaymentEventConsumer {
 
         try {
 
-            log.info("Payment event received from Kafka");
+            log.info(
+                    "Payment event received from Kafka. topic={}",
+                    KafkaConfig.RAW_PAYMENT_EVENTS_TOPIC
+            );
 
-            // ------------------------------------------------
-            // 1. Validate Kafka message
-            // ------------------------------------------------
+            // ====================================================
+            // 1. VALIDATE KAFKA MESSAGE
+            // ====================================================
 
             if (message == null || message.isBlank()) {
 
@@ -43,23 +51,74 @@ public class PaymentEventConsumer {
                 return;
             }
 
-            // ------------------------------------------------
-            // 2. Deserialize Kafka message
-            // ------------------------------------------------
+            // ====================================================
+            // 2. DESERIALIZE KAFKA MESSAGE
+            // ====================================================
 
-            PaymentFailedEvent event =
-                    objectMapper.readValue(
-                            message,
-                            PaymentFailedEvent.class
-                    );
+            PaymentFailedEvent event;
 
-            // ------------------------------------------------
-            // 3. Validate event structure
-            // ------------------------------------------------
+            try {
 
-            if (event.getPayload() == null ||
-                    event.getPayload().getPayment() == null ||
-                    event.getPayload().getPayment().getEntity() == null) {
+                event =
+                        objectMapper.readValue(
+                                message,
+                                PaymentFailedEvent.class
+                        );
+
+            } catch (Exception exception) {
+
+                log.error(
+                        "Failed to deserialize Kafka payment event",
+                        exception
+                );
+
+                /*
+                 * Invalid JSON cannot be processed successfully.
+                 *
+                 * Throwing the exception allows the Kafka
+                 * error-handling mechanism to deal with it.
+                 */
+
+                throw new IllegalArgumentException(
+                        "Invalid payment event JSON",
+                        exception
+                );
+            }
+
+            // ====================================================
+            // 3. VALIDATE EVENT STRUCTURE
+            // ====================================================
+
+            if (event == null) {
+
+                log.warn(
+                        "Ignoring null deserialized payment event"
+                );
+
+                return;
+            }
+
+            if (event.getPayload() == null) {
+
+                log.warn(
+                        "Invalid payment event: payload is missing"
+                );
+
+                return;
+            }
+
+            if (event.getPayload().getPayment() == null) {
+
+                log.warn(
+                        "Invalid payment event: payment object is missing"
+                );
+
+                return;
+            }
+
+            if (event.getPayload()
+                    .getPayment()
+                    .getEntity() == null) {
 
                 log.warn(
                         "Invalid payment event: payment entity is missing"
@@ -68,17 +127,21 @@ public class PaymentEventConsumer {
                 return;
             }
 
+            // ====================================================
+            // 4. EXTRACT PAYMENT
+            // ====================================================
+
             PaymentFailedEvent.Entity payment =
                     event.getPayload()
                             .getPayment()
                             .getEntity();
 
-            // ------------------------------------------------
-            // 4. Validate payment ID
-            // ------------------------------------------------
+            // ====================================================
+            // 5. VALIDATE PAYMENT ID
+            // ====================================================
 
-            if (payment.getId() == null ||
-                    payment.getId().isBlank()) {
+            if (payment.getId() == null
+                    || payment.getId().isBlank()) {
 
                 log.warn(
                         "Invalid payment event: payment ID is missing"
@@ -88,17 +151,18 @@ public class PaymentEventConsumer {
             }
 
             /*
-             * The current event model does not contain a
-             * dedicated Razorpay event ID.
+             * The current PaymentFailedEvent model does not contain
+             * a dedicated Razorpay webhook event ID.
              *
-             * Therefore, payment ID is currently used as
-             * the idempotency identifier.
+             * Therefore payment ID is used as the downstream
+             * idempotency identifier.
              */
+
             eventId = payment.getId();
 
-            // ------------------------------------------------
-            // 5. Redis idempotency check
-            // ------------------------------------------------
+            // ====================================================
+            // 6. REDIS IDEMPOTENCY CHECK
+            // ====================================================
 
             boolean firstProcessing =
                     idempotencyService.tryMarkAsProcessed(
@@ -107,7 +171,7 @@ public class PaymentEventConsumer {
 
             if (!firstProcessing) {
 
-                log.warn(
+                log.info(
                         "Duplicate Kafka payment event ignored. " +
                                 "eventId={}, paymentId={}",
                         eventId,
@@ -117,24 +181,27 @@ public class PaymentEventConsumer {
                 return;
             }
 
-            // ------------------------------------------------
-            // 6. Resolve customer ID
-            // ------------------------------------------------
+            // ====================================================
+            // 7. RESOLVE CUSTOMER ID
+            // ====================================================
 
-            String customerId = payment.getCustomerId();
+            String customerId =
+                    payment.getCustomerId();
 
             /*
-             * Some payment events contain customer_id inside
-             * payment.entity.
+             * Prefer payment.entity.customer_id.
              *
-             * Our test event contains customer.entity.id at
-             * the top level instead.
+             * If it is not available, fall back to:
              *
-             * Use the payment customer_id first, then fall
-             * back to the top-level customer entity.
+             * payload.customer.entity.id
              */
-            if (event.getPayload().getCustomer() != null &&
-                    event.getPayload().getCustomer().getEntity() != null) {
+
+            if ((customerId == null
+                    || customerId.isBlank())
+                    && event.getPayload().getCustomer() != null
+                    && event.getPayload()
+                    .getCustomer()
+                    .getEntity() != null) {
 
                 customerId =
                         event.getPayload()
@@ -143,29 +210,37 @@ public class PaymentEventConsumer {
                                 .getId();
             }
 
-            // ------------------------------------------------
-            // 7. Log payment failure
-            // ------------------------------------------------
+            // ====================================================
+            // 8. LOG PAYMENT FAILURE
+            // ====================================================
 
             log.info(
                     "Payment failure received. " +
-                            "PaymentId: {}, CustomerId: {}, " +
-                            "Amount: {}, Currency: {}, ErrorCode: {}",
+                            "paymentId={}, customerId={}, " +
+                            "amount={}, currency={}, " +
+                            "errorCode={}, errorDescription={}",
                     payment.getId(),
                     customerId,
                     payment.getAmount(),
                     payment.getCurrency(),
-                    payment.getErrorCode()
+                    payment.getErrorCode(),
+                    payment.getErrorDescription()
             );
 
-            // ------------------------------------------------
-            // 8. Process payment recovery
-            // ------------------------------------------------
+            // ====================================================
+            // 9. PROCESS PAYMENT RECOVERY
+            // ====================================================
 
-            paymentRecoveryService.processPaymentFailure(event);
+            paymentRecoveryService.processPaymentFailure(
+                    event
+            );
+
+            // ====================================================
+            // 10. SUCCESS
+            // ====================================================
 
             log.info(
-                    "Payment recovery processing completed. " +
+                    "Payment recovery processing completed successfully. " +
                             "paymentId={}, eventId={}",
                     payment.getId(),
                     eventId
@@ -173,17 +248,50 @@ public class PaymentEventConsumer {
 
         } catch (Exception exception) {
 
+            // ====================================================
+            // 11. REMOVE IDEMPOTENCY MARK ON FAILURE
+            // ====================================================
+
             /*
-             * If processing fails after the Redis idempotency
-             * key was created, remove the key so Kafka can
-             * retry the event.
+             * If processing failed after Redis marked this event
+             * as processed, remove the mark.
+             *
+             * This allows Kafka to retry the message.
              */
+
             if (eventId != null) {
 
-                idempotencyService.removeProcessedMark(
-                        eventId
-                );
+                try {
+
+                    idempotencyService.removeProcessedMark(
+                            eventId
+                    );
+
+                    log.info(
+                            "Removed Redis idempotency mark after " +
+                                    "payment event failure. eventId={}",
+                            eventId
+                    );
+
+                } catch (Exception idempotencyException) {
+
+                    /*
+                     * Do not hide the original processing failure
+                     * if Redis cleanup itself fails.
+                     */
+
+                    log.error(
+                            "Failed to remove Redis idempotency mark. " +
+                                    "eventId={}",
+                            eventId,
+                            idempotencyException
+                    );
+                }
             }
+
+            // ====================================================
+            // 12. LOG FAILURE
+            // ====================================================
 
             log.error(
                     "Failed to process payment event from Kafka. " +
@@ -191,6 +299,10 @@ public class PaymentEventConsumer {
                     eventId,
                     exception
             );
+
+            // ====================================================
+            // 13. PROPAGATE FAILURE TO KAFKA
+            // ====================================================
 
             throw new RuntimeException(
                     "Failed to process payment event",

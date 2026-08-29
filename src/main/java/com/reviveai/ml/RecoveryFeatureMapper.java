@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 
 @Component
 @RequiredArgsConstructor
@@ -35,6 +37,28 @@ public class RecoveryFeatureMapper {
             );
         }
 
+        // =========================================================
+        // 1. CURRENT PAYMENT TIME
+        // =========================================================
+
+        OffsetDateTime currentAttemptTime =
+                OffsetDateTime.now();
+
+        if (recoveryCase.getFailedPayment() != null
+                && recoveryCase
+                .getFailedPayment()
+                .getAttemptedAt() != null) {
+
+            currentAttemptTime =
+                    recoveryCase
+                            .getFailedPayment()
+                            .getAttemptedAt();
+        }
+
+        // =========================================================
+        // 2. PAYMENT AMOUNT
+        // =========================================================
+
         BigDecimal paymentAmount =
                 recoveryCase.getAmountAtRisk();
 
@@ -43,26 +67,48 @@ public class RecoveryFeatureMapper {
         }
 
         // =========================================================
-        // Historical payment statistics
+        // 3. PREVIOUS SUCCESSFUL PAYMENTS
         // =========================================================
 
         long previousSuccessfulPayments =
                 paymentAttemptRepository
-                        .countBySubscriptionIdAndStatus(
+                        .countBySubscriptionIdAndStatusAndAttemptedAtBefore(
                                 subscription.getId(),
-                                PaymentAttempt.PaymentStatus.SUCCESS
+                                PaymentAttempt.PaymentStatus.SUCCESS,
+                                currentAttemptTime
                         );
+
+        // =========================================================
+        // 4. PREVIOUS FAILED PAYMENTS
+        // =========================================================
+        //
+        // IMPORTANT:
+        // Only payments BEFORE the current failed payment
+        // are counted.
+        //
+        // This prevents the current failure from contaminating
+        // the historical ML features.
+        // =========================================================
 
         long previousFailedPayments =
                 paymentAttemptRepository
-                        .countBySubscriptionIdAndStatus(
+                        .countBySubscriptionIdAndStatusAndAttemptedAtBefore(
                                 subscription.getId(),
-                                PaymentAttempt.PaymentStatus.FAILED
+                                PaymentAttempt.PaymentStatus.FAILED,
+                                currentAttemptTime
                         );
+
+        // =========================================================
+        // 5. TOTAL PREVIOUS PAYMENTS
+        // =========================================================
 
         long totalPreviousPayments =
                 previousSuccessfulPayments
                         + previousFailedPayments;
+
+        // =========================================================
+        // 6. PAYMENT FAILURE RATE
+        // =========================================================
 
         BigDecimal paymentFailureRate =
                 BigDecimal.ZERO;
@@ -83,19 +129,59 @@ public class RecoveryFeatureMapper {
         }
 
         // =========================================================
-        // Current retry count
+        // 7. RETRY COUNT
+        // =========================================================
+        //
+        // Current data model does not have a dedicated retry_count
+        // column.
+        //
+        // Therefore previous failed attempts are used as the
+        // current retry-count signal.
         // =========================================================
 
-        int retryCount = 0;
+        int retryCount =
+                (int) Math.min(
+                        previousFailedPayments,
+                        Integer.MAX_VALUE
+                );
 
         // =========================================================
-        // Days past due
+        // 8. DAYS PAST DUE
+        // =========================================================
+        //
+        // nextBillingAt represents the expected billing time.
+        //
+        // If current time is after nextBillingAt, calculate the
+        // number of complete days since the billing date.
         // =========================================================
 
         int daysPastDue = 0;
 
+        if (subscription.getNextBillingAt() != null) {
+
+            OffsetDateTime now =
+                    OffsetDateTime.now();
+
+            if (now.isAfter(
+                    subscription.getNextBillingAt()
+            )) {
+
+                long days =
+                        Duration.between(
+                                subscription.getNextBillingAt(),
+                                now
+                        ).toDays();
+
+                daysPastDue =
+                        (int) Math.min(
+                                Math.max(days, 0),
+                                Integer.MAX_VALUE
+                        );
+            }
+        }
+
         // =========================================================
-        // Recovery potential
+        // 9. RECOVERY POTENTIAL
         // =========================================================
 
         String recoveryPotential =
@@ -106,7 +192,7 @@ public class RecoveryFeatureMapper {
                         : "MEDIUM";
 
         // =========================================================
-        // Gateway error code
+        // 10. GATEWAY ERROR CODE
         // =========================================================
 
         String errorCode = null;
@@ -120,23 +206,35 @@ public class RecoveryFeatureMapper {
         }
 
         // =========================================================
-        // Build ML feature request
+        // 11. BUILD ML REQUEST
         // =========================================================
 
         return RecoveryPredictionRequest.builder()
 
-                .paymentAmount(paymentAmount)
+                .paymentAmount(
+                        paymentAmount
+                )
 
-                .retryCount(retryCount)
+                .retryCount(
+                        retryCount
+                )
 
-                .daysPastDue(daysPastDue)
+                .daysPastDue(
+                        daysPastDue
+                )
 
                 .previousSuccessfulPayments(
-                        (int) previousSuccessfulPayments
+                        (int) Math.min(
+                                previousSuccessfulPayments,
+                                Integer.MAX_VALUE
+                        )
                 )
 
                 .previousFailedPayments(
-                        (int) previousFailedPayments
+                        (int) Math.min(
+                                previousFailedPayments,
+                                Integer.MAX_VALUE
+                        )
                 )
 
                 .paymentFailureRate(

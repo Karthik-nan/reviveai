@@ -42,30 +42,42 @@ class RecoveryActionExecutorTest {
 
     private RecoveryActionExecutor recoveryActionExecutor;
 
+    // ============================================================
+    // SETUP
+    // ============================================================
+
     @BeforeEach
     void setUp() {
 
         /*
-         * RecoveryActionExecutor builds its handler map
-         * inside the constructor.
+         * RecoveryActionExecutor builds its handler map inside
+         * the constructor.
          *
-         * Therefore getStrategy() must be stubbed before
-         * constructing the executor.
+         * Therefore all handlers must expose their strategy
+         * before the executor is constructed.
+         *
+         * lenient() is intentional because individual tests
+         * execute only one strategy, while all handlers are still
+         * required to construct the executor's handler registry.
          */
 
-        when(retryPaymentHandler.getStrategy())
+        lenient().when(retryPaymentHandler.getStrategy())
                 .thenReturn(RecoveryStrategy.RETRY_PAYMENT);
 
-        when(updatePaymentMethodHandler.getStrategy())
-                .thenReturn(RecoveryStrategy.UPDATE_PAYMENT_METHOD);
+        lenient().when(updatePaymentMethodHandler.getStrategy())
+                .thenReturn(
+                        RecoveryStrategy.UPDATE_PAYMENT_METHOD
+                );
 
-        when(customerActionHandler.getStrategy())
+        lenient().when(customerActionHandler.getStrategy())
                 .thenReturn(
                         RecoveryStrategy.CUSTOMER_ACTION_REQUIRED
                 );
 
-        when(manualReviewHandler.getStrategy())
-                .thenReturn(RecoveryStrategy.MANUAL_REVIEW);
+        lenient().when(manualReviewHandler.getStrategy())
+                .thenReturn(
+                        RecoveryStrategy.MANUAL_REVIEW
+                );
 
         recoveryActionExecutor =
                 new RecoveryActionExecutor(
@@ -108,20 +120,10 @@ class RecoveryActionExecutorTest {
                         )
                         .build();
 
-        RecoveryDecisionGuard.GuardResult guardResult =
-                RecoveryDecisionGuard.GuardResult.builder()
-                        .allowed(true)
-                        .reason(
-                                "Recovery decision passed all safety checks"
-                        )
-                        .build();
-
-        when(
-                recoveryDecisionGuard.validate(
-                        recoveryCase,
-                        decision
-                )
-        ).thenReturn(guardResult);
+        approveDecision(
+                recoveryCase,
+                decision
+        );
 
         when(
                 recoveryActionRepository
@@ -158,6 +160,20 @@ class RecoveryActionExecutorTest {
                 )
         ).thenReturn(pendingAction);
 
+        RecoveryOutcome outcome =
+                new RecoveryOutcome(
+                        RecoveryOutcome.OutcomeStatus.FAILED,
+                        BigDecimal.ZERO,
+                        "Payment retry request has not yet been integrated with Razorpay."
+                );
+
+        when(
+                retryPaymentHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenReturn(outcome);
+
         recoveryActionExecutor.execute(
                 recoveryCase,
                 decision
@@ -176,7 +192,10 @@ class RecoveryActionExecutorTest {
         List<RecoveryAction> savedActions =
                 captor.getAllValues();
 
-        assertEquals(2, savedActions.size());
+        assertEquals(
+                2,
+                savedActions.size()
+        );
 
         RecoveryAction firstSavedAction =
                 savedActions.get(0);
@@ -318,6 +337,20 @@ class RecoveryActionExecutorTest {
                 )
         ).thenReturn(pendingAction);
 
+        RecoveryOutcome outcome =
+                new RecoveryOutcome(
+                        RecoveryOutcome.OutcomeStatus.FAILED,
+                        BigDecimal.ZERO,
+                        "Customer payment method update is required."
+                );
+
+        when(
+                updatePaymentMethodHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenReturn(outcome);
+
         recoveryActionExecutor.execute(
                 recoveryCase,
                 decision
@@ -429,6 +462,20 @@ class RecoveryActionExecutorTest {
                 )
         ).thenReturn(pendingAction);
 
+        RecoveryOutcome outcome =
+                new RecoveryOutcome(
+                        RecoveryOutcome.OutcomeStatus.FAILED,
+                        BigDecimal.ZERO,
+                        "Customer action is required before payment can be recovered."
+                );
+
+        when(
+                customerActionHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenReturn(outcome);
+
         recoveryActionExecutor.execute(
                 recoveryCase,
                 decision
@@ -539,6 +586,20 @@ class RecoveryActionExecutorTest {
                         any(RecoveryAction.class)
                 )
         ).thenReturn(pendingAction);
+
+        RecoveryOutcome outcome =
+                new RecoveryOutcome(
+                        RecoveryOutcome.OutcomeStatus.FAILED,
+                        BigDecimal.ZERO,
+                        "Recovery case requires manual review."
+                );
+
+        when(
+                manualReviewHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenReturn(outcome);
 
         recoveryActionExecutor.execute(
                 recoveryCase,
@@ -983,6 +1044,14 @@ class RecoveryActionExecutorTest {
 
         verify(
                 recoveryActionRepository,
+                times(1)
+        ).findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
+                recoveryCase.getId(),
+                RecoveryStrategy.RETRY_PAYMENT
+        );
+
+        verify(
+                recoveryActionRepository,
                 never()
         ).save(any(RecoveryAction.class));
 
@@ -1085,6 +1154,20 @@ class RecoveryActionExecutorTest {
                 newPendingAction
         );
 
+        RecoveryOutcome outcome =
+                new RecoveryOutcome(
+                        RecoveryOutcome.OutcomeStatus.FAILED,
+                        BigDecimal.ZERO,
+                        "Payment retry request has not yet been integrated with Razorpay."
+                );
+
+        when(
+                retryPaymentHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenReturn(outcome);
+
         recoveryActionExecutor.execute(
                 recoveryCase,
                 decision
@@ -1138,4 +1221,3 @@ class RecoveryActionExecutorTest {
         ).thenReturn(guardResult);
     }
 }
-
