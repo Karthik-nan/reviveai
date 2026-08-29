@@ -14,7 +14,6 @@ import com.reviveai.ml.RecoveryPredictionResponse;
 import com.reviveai.ml.RecoveryPredictionService;
 import com.reviveai.recovery.RecoveryActionExecutor;
 import com.reviveai.recovery.RecoveryDecision;
-import com.reviveai.recovery.RecoveryDecisionGuard;
 import com.reviveai.recovery.RecoveryPriority;
 import com.reviveai.recovery.RecoveryStrategy;
 import com.reviveai.recovery.RecoveryStrategyEngine;
@@ -27,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Slf4j
 @Service
@@ -34,13 +34,15 @@ import java.math.BigDecimal;
 public class PaymentRecoveryService {
 
     private final SubscriptionRepository subscriptionRepository;
+
     private final PaymentAttemptRepository paymentAttemptRepository;
+
     private final RecoveryCaseRepository recoveryCaseRepository;
 
     private final SubscriptionHealthEvaluator subscriptionHealthEvaluator;
 
     private final RecoveryStrategyEngine recoveryStrategyEngine;
-    private final RecoveryDecisionGuard recoveryDecisionGuard;
+
     private final RecoveryActionExecutor recoveryActionExecutor;
 
     // =========================================================
@@ -48,6 +50,7 @@ public class PaymentRecoveryService {
     // =========================================================
 
     private final RecoveryFeatureMapper recoveryFeatureMapper;
+
     private final RecoveryPredictionService recoveryPredictionService;
 
     // =========================================================
@@ -69,13 +72,31 @@ public class PaymentRecoveryService {
         // 1. VALIDATE EVENT
         // =====================================================
 
-        if (event == null
-                || event.getPayload() == null
-                || event.getPayload().getPayment() == null
-                || event.getPayload().getPayment().getEntity() == null) {
+        if (event == null) {
 
             log.warn(
-                    "Ignoring invalid payment failure event"
+                    "Ignoring null payment failure event"
+            );
+
+            return;
+        }
+
+        if (event.getPayload() == null) {
+
+            log.warn(
+                    "Ignoring payment failure event with null payload"
+            );
+
+            return;
+        }
+
+        if (event.getPayload().getPayment() == null
+                || event.getPayload()
+                .getPayment()
+                .getEntity() == null) {
+
+            log.warn(
+                    "Ignoring payment failure event without payment entity"
             );
 
             return;
@@ -94,18 +115,32 @@ public class PaymentRecoveryService {
                 payment.getId();
 
         // =====================================================
-        // 3. EXTRACT SUBSCRIPTION ID
+        // 3. VALIDATE PAYMENT ID
+        // =====================================================
+
+        if (paymentId == null
+                || paymentId.isBlank()) {
+
+            log.warn(
+                    "Payment failure event does not contain payment ID"
+            );
+
+            return;
+        }
+
+        // =====================================================
+        // 4. EXTRACT SUBSCRIPTION ID
         // =====================================================
 
         String subscriptionId =
                 payment.getSubscriptionId();
 
         /*
-         * Razorpay may provide the subscription ID through:
+         * Preferred:
          *
          * payload.payment.entity.subscription_id
          *
-         * OR
+         * Fallback:
          *
          * payload.subscription.entity.id
          */
@@ -124,27 +159,6 @@ public class PaymentRecoveryService {
                             .getId();
         }
 
-        log.info(
-                "Processing payment failure. " +
-                        "paymentId={}, subscriptionId={}",
-                paymentId,
-                subscriptionId
-        );
-
-        // =====================================================
-        // 4. VALIDATE PAYMENT ID
-        // =====================================================
-
-        if (paymentId == null
-                || paymentId.isBlank()) {
-
-            log.warn(
-                    "Payment event does not contain payment ID"
-            );
-
-            return;
-        }
-
         // =====================================================
         // 5. VALIDATE SUBSCRIPTION ID
         // =====================================================
@@ -153,13 +167,20 @@ public class PaymentRecoveryService {
                 || subscriptionId.isBlank()) {
 
             log.warn(
-                    "Payment event does not contain subscription ID. " +
+                    "Payment failure event does not contain subscription ID. " +
                             "paymentId={}",
                     paymentId
             );
 
             return;
         }
+
+        log.info(
+                "Processing payment failure. " +
+                        "paymentId={}, subscriptionId={}",
+                paymentId,
+                subscriptionId
+        );
 
         // =====================================================
         // 6. IDEMPOTENCY CHECK
@@ -170,7 +191,8 @@ public class PaymentRecoveryService {
                 .isPresent()) {
 
             log.info(
-                    "Payment already processed. paymentId={}",
+                    "Payment failure already processed. " +
+                            "Skipping duplicate event. paymentId={}",
                     paymentId
             );
 
@@ -208,15 +230,27 @@ public class PaymentRecoveryService {
         );
 
         // =====================================================
-        // 8. VALIDATE AMOUNT
+        // 8. VALIDATE PAYMENT AMOUNT
         // =====================================================
 
         if (payment.getAmount() == null) {
 
             log.warn(
-                    "Payment event does not contain amount. " +
+                    "Payment failure event does not contain amount. " +
                             "paymentId={}",
                     paymentId
+            );
+
+            return;
+        }
+
+        if (payment.getAmount() < 0) {
+
+            log.warn(
+                    "Payment failure event contains invalid negative amount. " +
+                            "paymentId={}, amount={}",
+                    paymentId,
+                    payment.getAmount()
             );
 
             return;
@@ -227,7 +261,8 @@ public class PaymentRecoveryService {
         // =====================================================
 
         /*
-         * Razorpay sends amount in smallest currency unit.
+         * Razorpay amount is represented in the smallest
+         * currency unit.
          *
          * Example:
          *
@@ -236,8 +271,27 @@ public class PaymentRecoveryService {
 
         BigDecimal amount =
                 BigDecimal.valueOf(
-                        payment.getAmount()
-                ).movePointLeft(2);
+                                payment.getAmount()
+                        )
+                        .movePointLeft(2)
+                        .setScale(
+                                2,
+                                RoundingMode.HALF_UP
+                        );
+
+        if (amount.compareTo(
+                BigDecimal.ZERO
+        ) <= 0) {
+
+            log.warn(
+                    "Payment amount must be greater than zero. " +
+                            "paymentId={}, amount={}",
+                    paymentId,
+                    amount
+            );
+
+            return;
+        }
 
         log.info(
                 "Payment amount converted. " +
@@ -255,6 +309,9 @@ public class PaymentRecoveryService {
                         .subscription(subscription)
                         .externalPaymentId(paymentId)
                         .idempotencyKey(paymentId)
+                        .externalOrderId(
+                                payment.getOrderId()
+                        )
                         .amount(amount)
                         .status(
                                 PaymentAttempt.PaymentStatus.FAILED
@@ -267,10 +324,24 @@ public class PaymentRecoveryService {
                         )
                         .build();
 
-        paymentAttempt =
-                paymentAttemptRepository.save(
-                        paymentAttempt
-                );
+        try {
+
+            paymentAttempt =
+                    paymentAttemptRepository.save(
+                            paymentAttempt
+                    );
+
+        } catch (Exception exception) {
+
+            log.error(
+                    "Failed to persist PaymentAttempt. " +
+                            "paymentId={}",
+                    paymentId,
+                    exception
+            );
+
+            throw exception;
+        }
 
         log.info(
                 "PaymentAttempt created. " +
@@ -335,9 +406,7 @@ public class PaymentRecoveryService {
         // =====================================================
 
         RecoveryCase.RecoveryPotential recoveryPotential =
-                determineRecoveryPotential(
-                        amount
-                );
+                determineRecoveryPotential(amount);
 
         // =====================================================
         // 14. CREATE RECOVERY CASE
@@ -353,9 +422,10 @@ public class PaymentRecoveryService {
                         .recoveryPotential(
                                 recoveryPotential
                         )
-                        .amountAtRisk(
-                                amount
+                        .recoveryScore(
+                                BigDecimal.ZERO
                         )
+                        .amountAtRisk(amount)
                         .amountRecovered(
                                 BigDecimal.ZERO
                         )
@@ -380,10 +450,47 @@ public class PaymentRecoveryService {
         // 15. BUILD ML FEATURES
         // =====================================================
 
-        RecoveryPredictionRequest predictionRequest =
-                recoveryFeatureMapper.map(
-                        recoveryCase
-                );
+        RecoveryPredictionRequest predictionRequest;
+
+        try {
+
+            predictionRequest =
+                    recoveryFeatureMapper.map(
+                            recoveryCase
+                    );
+
+        } catch (Exception exception) {
+
+            log.error(
+                    "Failed to generate ML features. " +
+                            "recoveryCaseId={}",
+                    recoveryCase.getId(),
+                    exception
+            );
+
+            escalateRecoveryCase(
+                    recoveryCase,
+                    "ML feature generation failed"
+            );
+
+            return;
+        }
+
+        if (predictionRequest == null) {
+
+            log.warn(
+                    "ML feature mapper returned null. " +
+                            "recoveryCaseId={}",
+                    recoveryCase.getId()
+            );
+
+            escalateRecoveryCase(
+                    recoveryCase,
+                    "ML feature generation returned null"
+            );
+
+            return;
+        }
 
         log.info(
                 "Tier 2 ML features generated. " +
@@ -408,10 +515,35 @@ public class PaymentRecoveryService {
         // 16. RUN ML PREDICTION
         // =====================================================
 
-        RecoveryPredictionResponse prediction =
-                recoveryPredictionService.predict(
-                        predictionRequest
-                );
+        RecoveryPredictionResponse prediction;
+
+        try {
+
+            prediction =
+                    recoveryPredictionService.predict(
+                            predictionRequest
+                    );
+
+        } catch (Exception exception) {
+
+            log.error(
+                    "Tier 2 ML prediction failed. " +
+                            "recoveryCaseId={}",
+                    recoveryCase.getId(),
+                    exception
+            );
+
+            escalateRecoveryCase(
+                    recoveryCase,
+                    "ML prediction failed"
+            );
+
+            return;
+        }
+
+        // =====================================================
+        // 17. VALIDATE ML RESPONSE
+        // =====================================================
 
         if (prediction == null
                 || prediction.getRecoveryProbability() == null) {
@@ -423,12 +555,9 @@ public class PaymentRecoveryService {
                     recoveryCase.getId()
             );
 
-            recoveryCase.setStatus(
-                    RecoveryCase.RecoveryStatus.ESCALATED
-            );
-
-            recoveryCaseRepository.save(
-                    recoveryCase
+            escalateRecoveryCase(
+                    recoveryCase,
+                    "ML prediction unavailable"
             );
 
             return;
@@ -438,17 +567,60 @@ public class PaymentRecoveryService {
                 prediction.getRecoveryProbability();
 
         // =====================================================
-        // 17. STORE ML SCORE
+        // 18. VALIDATE ML SCORE
         // =====================================================
+
+        if (recoveryScore.compareTo(
+                BigDecimal.ZERO
+        ) < 0
+                || recoveryScore.compareTo(
+                BigDecimal.ONE
+        ) > 0) {
+
+            log.warn(
+                    "Invalid ML recovery probability. " +
+                            "recoveryCaseId={}, score={}",
+                    recoveryCase.getId(),
+                    recoveryScore
+            );
+
+            escalateRecoveryCase(
+                    recoveryCase,
+                    "ML returned probability outside 0-1"
+            );
+
+            return;
+        }
+
+        recoveryScore =
+                recoveryScore.setScale(
+                        2,
+                        RoundingMode.HALF_UP
+                );
+
+        // =====================================================
+        // 19. STORE ML SCORE
+        // =====================================================
+
+        /*
+         * IMPORTANT:
+         *
+         * recoveryCase is already a managed JPA entity because
+         * this entire method runs inside one transaction.
+         *
+         * Therefore an additional:
+         *
+         * recoveryCaseRepository.save(recoveryCase)
+         *
+         * is unnecessary here.
+         *
+         * Hibernate dirty checking will persist recoveryScore
+         * automatically at transaction commit.
+         */
 
         recoveryCase.setRecoveryScore(
                 recoveryScore
         );
-
-        recoveryCase =
-                recoveryCaseRepository.save(
-                        recoveryCase
-                );
 
         log.info(
                 "Tier 2 ML prediction stored. " +
@@ -456,19 +628,33 @@ public class PaymentRecoveryService {
                         "recoveryProbability={}, " +
                         "modelVersion={}, reason={}",
                 recoveryCase.getId(),
-                prediction.getRecoveryProbability(),
+                recoveryScore,
                 prediction.getModelVersion(),
                 prediction.getPredictionReason()
         );
 
         // =====================================================
-        // 18. DETERMINE RULE-BASED STRATEGY FIRST
+        // 20. DETERMINE RULE-BASED STRATEGY
         // =====================================================
 
-        RecoveryDecision ruleBasedDecision =
-                recoveryStrategyEngine.determineStrategy(
-                        recoveryCase
-                );
+        RecoveryDecision ruleBasedDecision = null;
+
+        try {
+
+            ruleBasedDecision =
+                    recoveryStrategyEngine.determineStrategy(
+                            recoveryCase
+                    );
+
+        } catch (Exception exception) {
+
+            log.error(
+                    "Rule-based strategy engine failed. " +
+                            "recoveryCaseId={}",
+                    recoveryCase.getId(),
+                    exception
+            );
+        }
 
         RecoveryStrategy ruleBasedStrategy = null;
 
@@ -493,15 +679,15 @@ public class PaymentRecoveryService {
         } else {
 
             log.warn(
-                    "Rule-based strategy engine returned null. " +
-                            "AI agent will use its own fallback logic. " +
+                    "Rule-based strategy unavailable. " +
+                            "AI agent will determine the strategy. " +
                             "recoveryCaseId={}",
                     recoveryCase.getId()
             );
         }
 
         // =====================================================
-        // 19. BUILD AI AGENT REQUEST
+        // 21. BUILD AI AGENT REQUEST
         // =====================================================
 
         RecoveryAgentRequest agentRequest =
@@ -509,9 +695,7 @@ public class PaymentRecoveryService {
                         .recoveryCaseId(
                                 recoveryCase.getId()
                         )
-                        .paymentAmount(
-                                amount
-                        )
+                        .paymentAmount(amount)
                         .recoveryScore(
                                 recoveryScore
                         )
@@ -525,7 +709,8 @@ public class PaymentRecoveryService {
                                 predictionRequest.getRetryCount()
                         )
                         .paymentFailureRate(
-                                predictionRequest.getPaymentFailureRate()
+                                predictionRequest
+                                        .getPaymentFailureRate()
                         )
                         .ruleBasedStrategy(
                                 ruleBasedStrategy
@@ -552,7 +737,7 @@ public class PaymentRecoveryService {
         );
 
         // =====================================================
-        // 20. AI AGENT RECOMMENDATION
+        // 22. AI AGENT RECOMMENDATION
         // =====================================================
 
         RecoveryAgentResponse agentResponse;
@@ -564,45 +749,54 @@ public class PaymentRecoveryService {
                             agentRequest
                     );
 
-        } catch (Exception e) {
+        } catch (Exception exception) {
 
             log.error(
                     "Recovery AI agent failed. " +
                             "recoveryCaseId={}",
                     recoveryCase.getId(),
-                    e
+                    exception
             );
 
-            recoveryCase.setStatus(
-                    RecoveryCase.RecoveryStatus.ESCALATED
-            );
-
-            recoveryCaseRepository.save(
-                    recoveryCase
+            escalateRecoveryCase(
+                    recoveryCase,
+                    "AI recovery agent failed"
             );
 
             return;
         }
 
         // =====================================================
-        // 21. VALIDATE AGENT RESPONSE
+        // 23. VALIDATE AGENT RESPONSE
         // =====================================================
 
-        if (agentResponse == null
-                || agentResponse.getRecommendedStrategy() == null) {
+        if (agentResponse == null) {
 
             log.warn(
-                    "AI agent returned invalid recommendation. " +
+                    "AI agent returned null response. " +
                             "recoveryCaseId={}",
                     recoveryCase.getId()
             );
 
-            recoveryCase.setStatus(
-                    RecoveryCase.RecoveryStatus.ESCALATED
+            escalateRecoveryCase(
+                    recoveryCase,
+                    "AI agent returned null"
             );
 
-            recoveryCaseRepository.save(
-                    recoveryCase
+            return;
+        }
+
+        if (agentResponse.getRecommendedStrategy() == null) {
+
+            log.warn(
+                    "AI agent returned no strategy. " +
+                            "recoveryCaseId={}",
+                    recoveryCase.getId()
+            );
+
+            escalateRecoveryCase(
+                    recoveryCase,
+                    "AI agent returned no strategy"
             );
 
             return;
@@ -622,7 +816,7 @@ public class PaymentRecoveryService {
         );
 
         // =====================================================
-        // 22. APPLY AGENT RECOMMENDATION
+        // 24. BUILD FINAL DECISION
         // =====================================================
 
         RecoveryStrategy finalStrategy =
@@ -631,31 +825,22 @@ public class PaymentRecoveryService {
         RecoveryPriority finalPriority =
                 agentResponse.getPriority();
 
-        /*
-         * If the agent does not return a priority,
-         * use HIGH as the safe default.
-         */
-
         if (finalPriority == null) {
 
             finalPriority =
                     RecoveryPriority.HIGH;
         }
 
-        /*
-         * Build the final RecoveryDecision using the
-         * recommendation produced by the AI agent.
-         *
-         * The agent recommends.
-         * The executor executes.
-         */
-
         RecoveryDecision finalDecision =
                 RecoveryDecision.builder()
                         .strategy(finalStrategy)
                         .priority(finalPriority)
-                        .recoveryScore(recoveryScore)
-                        .reason(agentResponse.getReason())
+                        .recoveryScore(
+                                recoveryScore
+                        )
+                        .reason(
+                                agentResponse.getReason()
+                        )
                         .build();
 
         log.info(
@@ -669,62 +854,57 @@ public class PaymentRecoveryService {
         );
 
         // =====================================================
-        // 23. SAFETY GUARD
+        // 25. MARK CASE IN PROGRESS
         // =====================================================
 
-        RecoveryDecisionGuard.GuardResult guardResult =
-                recoveryDecisionGuard.validate(
-                        recoveryCase,
-                        finalDecision
-                );
+        recoveryCase.setStatus(
+                RecoveryCase.RecoveryStatus.IN_PROGRESS
+        );
 
-        if (!guardResult.isAllowed()) {
+        /*
+         * No explicit save is necessary here because recoveryCase
+         * is managed by the current transaction.
+         */
 
-            log.warn(
-                    "Recovery decision rejected by safety guard. " +
-                            "recoveryCaseId={}, strategy={}, " +
-                            "reason={}",
+        // =====================================================
+        // 26. EXECUTE RECOVERY ACTION
+        // =====================================================
+
+        try {
+
+            recoveryActionExecutor.execute(
+                    recoveryCase,
+                    finalDecision
+            );
+
+            log.info(
+                    "Recovery action execution completed. " +
+                            "recoveryCaseId={}, strategy={}",
+                    recoveryCase.getId(),
+                    finalDecision.getStrategy()
+            );
+
+        } catch (Exception exception) {
+
+            log.error(
+                    "Recovery action execution failed. " +
+                            "recoveryCaseId={}, strategy={}",
                     recoveryCase.getId(),
                     finalDecision.getStrategy(),
-                    guardResult.getReason()
+                    exception
             );
 
             recoveryCase.setStatus(
-                    RecoveryCase.RecoveryStatus.ESCALATED
+                    RecoveryCase.RecoveryStatus.FAILED
             );
 
-            recoveryCaseRepository.save(
-                    recoveryCase
-            );
+            /*
+             * The entity is already managed, so Hibernate will
+             * persist the FAILED state when the transaction commits.
+             */
 
             return;
         }
-
-        log.info(
-                "AI recovery decision approved by safety guard. " +
-                        "recoveryCaseId={}, strategy={}, " +
-                        "priority={}, score={}",
-                recoveryCase.getId(),
-                finalDecision.getStrategy(),
-                finalDecision.getPriority(),
-                finalDecision.getRecoveryScore()
-        );
-
-        // =====================================================
-        // 24. EXECUTE RECOVERY ACTION
-        // =====================================================
-
-        recoveryActionExecutor.execute(
-                recoveryCase,
-                finalDecision
-        );
-
-        log.info(
-                "Recovery action execution completed. " +
-                        "recoveryCaseId={}, strategy={}",
-                recoveryCase.getId(),
-                finalDecision.getStrategy()
-        );
     }
 
     // =========================================================
@@ -771,5 +951,32 @@ public class PaymentRecoveryService {
          */
 
         return RecoveryCase.RecoveryPotential.LOW;
+    }
+
+    // =========================================================
+    // ESCALATE RECOVERY CASE
+    // =========================================================
+
+    private void escalateRecoveryCase(
+            RecoveryCase recoveryCase,
+            String reason
+    ) {
+
+        recoveryCase.setStatus(
+                RecoveryCase.RecoveryStatus.ESCALATED
+        );
+
+        /*
+         * recoveryCase is managed by the active transaction.
+         *
+         * Explicit save is intentionally not required here.
+         */
+
+        log.warn(
+                "Recovery case escalated. " +
+                        "recoveryCaseId={}, reason={}",
+                recoveryCase.getId(),
+                reason
+        );
     }
 }

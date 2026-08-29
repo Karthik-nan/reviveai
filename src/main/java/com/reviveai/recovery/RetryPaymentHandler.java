@@ -1,6 +1,8 @@
 package com.reviveai.recovery;
 
 import com.reviveai.entity.RecoveryCase;
+import com.reviveai.payment.RazorpayPaymentService;
+import com.reviveai.payment.RazorpayRetryResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -10,10 +12,28 @@ import java.math.BigDecimal;
 @Component
 public class RetryPaymentHandler implements RecoveryActionHandler {
 
+    private final RazorpayPaymentService razorpayPaymentService;
+
+    public RetryPaymentHandler(
+            RazorpayPaymentService razorpayPaymentService
+    ) {
+        this.razorpayPaymentService =
+                razorpayPaymentService;
+    }
+
+    // =========================================================
+    // STRATEGY
+    // =========================================================
+
     @Override
     public RecoveryStrategy getStrategy() {
+
         return RecoveryStrategy.RETRY_PAYMENT;
     }
+
+    // =========================================================
+    // HANDLE RETRY PAYMENT
+    // =========================================================
 
     @Override
     public RecoveryOutcome handle(
@@ -21,31 +41,34 @@ public class RetryPaymentHandler implements RecoveryActionHandler {
             RecoveryDecision decision
     ) {
 
-        // ---------------------------------------------------------
-        // 1. Validate recovery case
-        // ---------------------------------------------------------
+        // =====================================================
+        // 1. VALIDATE RECOVERY CASE
+        // =====================================================
 
         if (recoveryCase == null) {
+
             throw new IllegalArgumentException(
                     "Recovery case cannot be null"
             );
         }
 
-        // ---------------------------------------------------------
-        // 2. Validate recovery decision
-        // ---------------------------------------------------------
+        // =====================================================
+        // 2. VALIDATE RECOVERY DECISION
+        // =====================================================
 
         if (decision == null) {
+
             throw new IllegalArgumentException(
                     "Recovery decision cannot be null"
             );
         }
 
-        // ---------------------------------------------------------
-        // 3. Validate strategy
-        // ---------------------------------------------------------
+        // =====================================================
+        // 3. VALIDATE STRATEGY
+        // =====================================================
 
-        if (decision.getStrategy() != RecoveryStrategy.RETRY_PAYMENT) {
+        if (decision.getStrategy()
+                != RecoveryStrategy.RETRY_PAYMENT) {
 
             throw new IllegalArgumentException(
                     "Invalid strategy for RetryPaymentHandler: "
@@ -53,122 +76,201 @@ public class RetryPaymentHandler implements RecoveryActionHandler {
             );
         }
 
-        // ---------------------------------------------------------
-        // 4. Log retry request
-        // ---------------------------------------------------------
+        // =====================================================
+        // 4. VALIDATE FAILED PAYMENT
+        // =====================================================
+
+        if (recoveryCase.getFailedPayment() == null) {
+
+            throw new IllegalStateException(
+                    "Recovery case does not contain a failed payment. "
+                            + "recoveryCaseId="
+                            + recoveryCase.getId()
+            );
+        }
+
+        // =====================================================
+        // 5. EXTRACT PAYMENT ATTEMPT
+        // =====================================================
+
+        var paymentAttempt =
+                recoveryCase.getFailedPayment();
+
+        // =====================================================
+        // 6. VALIDATE EXTERNAL PAYMENT ID
+        // =====================================================
+
+        String paymentId =
+                paymentAttempt.getExternalPaymentId();
+
+        if (paymentId == null ||
+                paymentId.isBlank()) {
+
+            throw new IllegalStateException(
+                    "Failed payment does not contain an external payment ID. "
+                            + "recoveryCaseId="
+                            + recoveryCase.getId()
+            );
+        }
+
+        // =====================================================
+        // 7. LOG RETRY REQUEST
+        // =====================================================
 
         log.info(
-                "Retry payment handler invoked. " +
-                        "recoveryCaseId={}, strategy={}, score={}, priority={}",
+                "Retry payment handler invoked. "
+                        + "recoveryCaseId={}, paymentId={}, "
+                        + "strategy={}, score={}, priority={}",
                 recoveryCase.getId(),
+                paymentId,
                 decision.getStrategy(),
                 decision.getRecoveryScore(),
                 decision.getPriority()
         );
 
-        // ---------------------------------------------------------
-        // 5. Validate failed payment
-        // ---------------------------------------------------------
+        // =====================================================
+        // 8. MARK RECOVERY CASE IN PROGRESS
+        // =====================================================
 
-        if (recoveryCase.getFailedPayment() == null) {
-
-            throw new IllegalStateException(
-                    "Recovery case does not contain a failed payment. " +
-                            "recoveryCaseId=" + recoveryCase.getId()
-            );
-        }
-
-        String paymentId =
-                recoveryCase
-                        .getFailedPayment()
-                        .getExternalPaymentId();
-
-        // ---------------------------------------------------------
-        // 6. Validate external payment ID
-        // ---------------------------------------------------------
-
-        if (paymentId == null || paymentId.isBlank()) {
-
-            throw new IllegalStateException(
-                    "Failed payment does not contain an external payment ID. " +
-                            "recoveryCaseId=" + recoveryCase.getId()
-            );
-        }
-
-        // ---------------------------------------------------------
-        // 7. Execution boundary
-        // ---------------------------------------------------------
-
-        /*
-         * Actual Razorpay payment retry will be integrated here.
-         *
-         * Current flow:
-         *
-         * Payment Failure
-         *       ↓
-         * Recovery Case
-         *       ↓
-         * ML Recovery Score
-         *       ↓
-         * Recovery Strategy
-         *       ↓
-         * Safety Guard
-         *       ↓
-         * RetryPaymentHandler
-         *
-         * Future flow:
-         *
-         * RetryPaymentHandler
-         *       ↓
-         * Razorpay Payment API
-         *       ↓
-         * Retry Result
-         *       ↓
-         * RecoveryAction / RecoveryCase update
-         */
+        recoveryCase.setStatus(
+                RecoveryCase.RecoveryStatus.IN_PROGRESS
+        );
 
         log.info(
-                "Payment retry execution boundary reached. " +
-                        "paymentId={}, recoveryCaseId={}, " +
-                        "score={}, priority={}",
-                paymentId,
+                "Recovery case marked IN_PROGRESS. "
+                        + "recoveryCaseId={}, paymentId={}",
                 recoveryCase.getId(),
-                decision.getRecoveryScore(),
-                decision.getPriority()
+                paymentId
         );
 
-        // ---------------------------------------------------------
-        // 8. Current implementation
-        // ---------------------------------------------------------
+        // =====================================================
+        // 9. CALL RAZORPAY PAYMENT SERVICE
+        // =====================================================
 
-        /*
-         * IMPORTANT:
-         *
-         * Razorpay retry is not integrated yet.
-         *
-         * Therefore we must NOT report the payment as RECOVERED.
-         *
-         * The recovery action itself was successfully dispatched,
-         * but the actual payment result is still unknown.
-         *
-         * The RecoveryCase should remain IN_PROGRESS until a
-         * payment-success or payment-failure event is received.
-         */
+        RazorpayRetryResult retryResult;
+
+        try {
+
+            retryResult =
+                    razorpayPaymentService.retryPayment(
+                            paymentAttempt
+                    );
+
+        } catch (Exception e) {
+
+            log.error(
+                    "Razorpay payment retry failed unexpectedly. "
+                            + "recoveryCaseId={}, paymentId={}",
+                    recoveryCase.getId(),
+                    paymentId,
+                    e
+            );
+
+            return new RecoveryOutcome(
+                    RecoveryOutcome.OutcomeStatus.FAILED,
+                    BigDecimal.ZERO,
+                    "Razorpay payment retry failed: "
+                            + e.getMessage()
+            );
+        }
+
+        // =====================================================
+        // 10. VALIDATE PROVIDER RESULT
+        // =====================================================
+
+        if (retryResult == null) {
+
+            throw new IllegalStateException(
+                    "Razorpay payment service returned null result. "
+                            + "recoveryCaseId="
+                            + recoveryCase.getId()
+            );
+        }
+
+        // =====================================================
+        // 11. LOG PROVIDER RESULT
+        // =====================================================
 
         log.info(
-                "Retry payment handler completed. " +
-                        "Payment provider integration pending. " +
-                        "paymentId={}, recoveryCaseId={}",
+                "Razorpay retry result received. "
+                        + "recoveryCaseId={}, paymentId={}, "
+                        + "status={}, providerPaymentId={}, message={}",
+                recoveryCase.getId(),
                 paymentId,
-                recoveryCase.getId()
+                retryResult.getStatus(),
+                retryResult.getPaymentId(),
+                retryResult.getMessage()
         );
 
-        return new RecoveryOutcome(
-                RecoveryOutcome.OutcomeStatus.SUBMITTED,
-                BigDecimal.ZERO,
-                "Payment retry request has not yet been integrated " +
-                        "with Razorpay. Execution boundary reached; " +
-                        "awaiting payment provider integration."
+        // =====================================================
+        // 12. HANDLE FAILED SUBMISSION
+        // =====================================================
+
+        if (retryResult.getStatus()
+                == RazorpayRetryResult.RetryStatus.FAILED) {
+
+            log.warn(
+                    "Razorpay retry submission failed. "
+                            + "recoveryCaseId={}, paymentId={}, "
+                            + "message={}",
+                    recoveryCase.getId(),
+                    paymentId,
+                    retryResult.getMessage()
+            );
+
+            return new RecoveryOutcome(
+                    RecoveryOutcome.OutcomeStatus.FAILED,
+                    BigDecimal.ZERO,
+                    retryResult.getMessage()
+            );
+        }
+
+        // =====================================================
+        // 13. HANDLE SUBMITTED RETRY
+        // =====================================================
+
+        if (retryResult.getStatus()
+                == RazorpayRetryResult.RetryStatus.SUBMITTED) {
+
+            /*
+             * IMPORTANT:
+             *
+             * SUBMITTED does NOT mean RECOVERED.
+             *
+             * Razorpay's final result must be received through
+             * the webhook.
+             *
+             * Therefore we intentionally do NOT:
+             *
+             * - mark PaymentAttempt SUCCESS
+             * - mark RecoveryCase RECOVERED
+             * - set amountRecovered
+             *
+             * The webhook will perform those state transitions.
+             */
+
+            log.info(
+                    "Razorpay retry submitted successfully. "
+                            + "Awaiting payment webhook. "
+                            + "recoveryCaseId={}, paymentId={}",
+                    recoveryCase.getId(),
+                    paymentId
+            );
+
+            return new RecoveryOutcome(
+                    RecoveryOutcome.OutcomeStatus.SUBMITTED,
+                    BigDecimal.ZERO,
+                    retryResult.getMessage()
+            );
+        }
+
+        // =====================================================
+        // 14. DEFENSIVE VALIDATION
+        // =====================================================
+
+        throw new IllegalStateException(
+                "Unsupported Razorpay retry status: "
+                        + retryResult.getStatus()
         );
     }
 }

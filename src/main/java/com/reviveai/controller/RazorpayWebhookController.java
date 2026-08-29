@@ -1,4 +1,6 @@
 package com.reviveai.controller;
+
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.reviveai.config.KafkaConfig;
 import com.reviveai.service.WebhookSafetyService;
@@ -19,11 +21,17 @@ import java.util.concurrent.TimeUnit;
 public class RazorpayWebhookController {
 
     private final WebhookSafetyService webhookSafetyService;
+
     private final KafkaTemplate<String, String> kafkaTemplate;
+
     private final ObjectMapper objectMapper;
 
     @Value("${razorpay.webhook.secret}")
     private String webhookSecret;
+
+    // =========================================================
+    // RAZORPAY WEBHOOK
+    // =========================================================
 
     @PostMapping("/razorpay")
     public ResponseEntity<String> handleRazorpayWebhook(
@@ -43,11 +51,45 @@ public class RazorpayWebhookController {
             @RequestBody String rawPayload
     ) {
 
-        log.info("Received Razorpay webhook");
+        log.info(
+                "Razorpay webhook received. eventId={}",
+                eventId
+        );
 
-        // ----------------------------------------------------
-        // 1. Validate signature
-        // ----------------------------------------------------
+        // =====================================================
+        // 1. VALIDATE RAW PAYLOAD
+        // =====================================================
+
+        if (rawPayload == null || rawPayload.isBlank()) {
+
+            log.warn(
+                    "Razorpay webhook rejected because payload is empty"
+            );
+
+            return ResponseEntity
+                    .badRequest()
+                    .body("Empty webhook payload");
+        }
+
+        // =====================================================
+        // 2. VALIDATE EVENT ID
+        // =====================================================
+
+        if (eventId == null || eventId.isBlank()) {
+
+            log.warn(
+                    "Razorpay webhook rejected because event ID is missing"
+            );
+
+            return ResponseEntity
+                    .badRequest()
+                    .body("Missing event ID");
+        }
+
+        // =====================================================
+        // 3. VALIDATE SIGNATURE
+        // =====================================================
+
         boolean validSignature =
                 webhookSafetyService.isValidSignature(
                         rawPayload,
@@ -57,62 +99,54 @@ public class RazorpayWebhookController {
 
         if (!validSignature) {
 
-            log.warn("Invalid Razorpay webhook signature");
+            log.warn(
+                    "Invalid Razorpay webhook signature. eventId={}",
+                    eventId
+            );
 
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body("Invalid signature");
         }
 
-        // ----------------------------------------------------
-        // 2. Validate event ID
-        // ----------------------------------------------------
-        if (eventId == null || eventId.isBlank()) {
+        // =====================================================
+        // 4. VALIDATE JSON
+        // =====================================================
 
-            log.warn("Razorpay webhook missing event ID");
-
-            return ResponseEntity
-                    .badRequest()
-                    .body("Missing event ID");
-        }
-
-        // ----------------------------------------------------
-        // 3. Validate JSON
-        // ----------------------------------------------------
         try {
 
-            objectMapper.readTree(rawPayload);
+            JsonNode root =
+                    objectMapper.readTree(rawPayload);
 
-        } catch (Exception e) {
+            if (root == null || root.isNull()) {
 
-            log.warn("Invalid JSON received from Razorpay");
+                log.warn(
+                        "Razorpay webhook contains empty JSON. eventId={}",
+                        eventId
+                );
+
+                return ResponseEntity
+                        .badRequest()
+                        .body("Invalid JSON payload");
+            }
+
+        } catch (Exception exception) {
+
+            log.warn(
+                    "Invalid JSON received from Razorpay. eventId={}",
+                    eventId,
+                    exception
+            );
 
             return ResponseEntity
                     .badRequest()
                     .body("Invalid JSON");
         }
 
-        // ----------------------------------------------------
-        // 4. Acquire idempotency lock BEFORE Kafka
-        // ----------------------------------------------------
-        boolean firstDelivery =
-                webhookSafetyService.acquireIdempotencyLock(eventId);
+        // =====================================================
+        // 5. PUBLISH RAW EVENT TO KAFKA
+        // =====================================================
 
-        if (!firstDelivery) {
-
-            log.info(
-                    "Duplicate Razorpay webhook ignored. eventId={}",
-                    eventId
-            );
-
-            return ResponseEntity
-                    .ok()
-                    .body("Event already processed");
-        }
-
-        // ----------------------------------------------------
-        // 5. Publish to Kafka
-        // ----------------------------------------------------
         try {
 
             kafkaTemplate
@@ -121,24 +155,52 @@ public class RazorpayWebhookController {
                             eventId,
                             rawPayload
                     )
-                    .get(10, TimeUnit.SECONDS);
+                    .get(
+                            10,
+                            TimeUnit.SECONDS
+                    );
 
             log.info(
-                    "Razorpay webhook successfully published to Kafka. eventId={}",
-                    eventId
+                    "Razorpay webhook published to Kafka successfully. " +
+                            "eventId={}, topic={}",
+                    eventId,
+                    KafkaConfig.RAW_PAYMENT_EVENTS_TOPIC
             );
+
+            // =================================================
+            // 6. ACKNOWLEDGE RAZORPAY
+            // =================================================
 
             return ResponseEntity
                     .ok()
                     .body("Webhook accepted");
 
-        } catch (Exception e) {
+        } catch (Exception exception) {
+
+            // =================================================
+            // 7. LOG KAFKA FAILURE
+            // =================================================
 
             log.error(
-                    "Failed to publish Razorpay webhook to Kafka. eventId={}",
+                    "Failed to publish Razorpay webhook to Kafka. " +
+                            "eventId={}, topic={}",
                     eventId,
-                    e
+                    KafkaConfig.RAW_PAYMENT_EVENTS_TOPIC,
+                    exception
             );
+
+            // =================================================
+            // 8. RETURN NON-2XX
+            // =================================================
+
+            /*
+             * Kafka did not successfully accept the webhook.
+             *
+             * Therefore we do NOT acknowledge the webhook as
+             * successfully processed.
+             *
+             * Returning 500 allows the payment provider to retry.
+             */
 
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -146,3 +208,4 @@ public class RazorpayWebhookController {
         }
     }
 }
+

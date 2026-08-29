@@ -13,6 +13,7 @@ public class CustomerActionRequiredHandler
 
     @Override
     public RecoveryStrategy getStrategy() {
+
         return RecoveryStrategy.CUSTOMER_ACTION_REQUIRED;
     }
 
@@ -22,29 +23,31 @@ public class CustomerActionRequiredHandler
             RecoveryDecision decision
     ) {
 
-        // ---------------------------------------------------------
-        // 1. Validate recovery case
-        // ---------------------------------------------------------
+        // =========================================================
+        // 1. VALIDATE RECOVERY CASE
+        // =========================================================
 
         if (recoveryCase == null) {
+
             throw new IllegalArgumentException(
                     "Recovery case cannot be null"
             );
         }
 
-        // ---------------------------------------------------------
-        // 2. Validate recovery decision
-        // ---------------------------------------------------------
+        // =========================================================
+        // 2. VALIDATE RECOVERY DECISION
+        // =========================================================
 
         if (decision == null) {
+
             throw new IllegalArgumentException(
                     "Recovery decision cannot be null"
             );
         }
 
-        // ---------------------------------------------------------
-        // 3. Validate strategy
-        // ---------------------------------------------------------
+        // =========================================================
+        // 3. VALIDATE STRATEGY
+        // =========================================================
 
         if (decision.getStrategy()
                 != RecoveryStrategy.CUSTOMER_ACTION_REQUIRED) {
@@ -55,9 +58,9 @@ public class CustomerActionRequiredHandler
             );
         }
 
-        // ---------------------------------------------------------
-        // 4. Log handler invocation
-        // ---------------------------------------------------------
+        // =========================================================
+        // 4. LOG HANDLER INVOCATION
+        // =========================================================
 
         log.info(
                 "Customer action required handler invoked. " +
@@ -68,38 +71,62 @@ public class CustomerActionRequiredHandler
                 decision.getPriority()
         );
 
-        // ---------------------------------------------------------
-        // 5. Execution boundary
-        // ---------------------------------------------------------
+        // =========================================================
+        // 5. MARK RECOVERY CASE IN PROGRESS
+        // =========================================================
 
-        /*
-         * Future implementation:
-         *
-         * 1. Generate customer recovery action.
-         * 2. Send payment-method update notification.
-         * 3. Create customer-facing recovery task.
-         * 4. Track customer response.
-         *
-         * For now this handler represents the
-         * execution boundary.
-         *
-         * No payment has been recovered yet.
-         */
+        recoveryCase.setStatus(
+                RecoveryCase.RecoveryStatus.IN_PROGRESS
+        );
 
         log.info(
-                "Customer action required. " +
+                "Recovery case marked IN_PROGRESS. " +
                         "recoveryCaseId={}",
                 recoveryCase.getId()
         );
 
-        // ---------------------------------------------------------
-        // 6. Return recovery outcome
-        // ---------------------------------------------------------
+        // =========================================================
+        // 6. CREATE CUSTOMER ACTION
+        // =========================================================
+
+        /*
+         * This strategy means that the system has determined that
+         * customer intervention is required before payment recovery
+         * can continue.
+         *
+         * Example workflow:
+         *
+         * Recovery Case
+         *       ↓
+         * Customer action request
+         *       ↓
+         * Customer responds
+         *       ↓
+         * Payment method updated / payment retry
+         *       ↓
+         * Razorpay webhook
+         *       ↓
+         * RECOVERED
+         *
+         * The creation/submission of this recovery action succeeded.
+         * The payment itself is not recovered yet.
+         */
+
+        log.info(
+                "Customer action request submitted successfully. " +
+                        "recoveryCaseId={}",
+                recoveryCase.getId()
+        );
+
+        // =========================================================
+        // 7. RETURN SUBMITTED
+        // =========================================================
 
         return new RecoveryOutcome(
-                RecoveryOutcome.OutcomeStatus.FAILED,
+                RecoveryOutcome.OutcomeStatus.SUBMITTED,
                 BigDecimal.ZERO,
-                "Customer action is required before payment can be recovered."
+                "Customer action request submitted. " +
+                        "Waiting for customer action before payment recovery."
         );
     }
 }

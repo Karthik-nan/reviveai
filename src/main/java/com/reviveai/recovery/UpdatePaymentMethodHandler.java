@@ -13,6 +13,7 @@ public class UpdatePaymentMethodHandler
 
     @Override
     public RecoveryStrategy getStrategy() {
+
         return RecoveryStrategy.UPDATE_PAYMENT_METHOD;
     }
 
@@ -22,29 +23,31 @@ public class UpdatePaymentMethodHandler
             RecoveryDecision decision
     ) {
 
-        // ---------------------------------------------------------
-        // 1. Validate recovery case
-        // ---------------------------------------------------------
+        // =========================================================
+        // 1. VALIDATE RECOVERY CASE
+        // =========================================================
 
         if (recoveryCase == null) {
+
             throw new IllegalArgumentException(
                     "Recovery case cannot be null"
             );
         }
 
-        // ---------------------------------------------------------
-        // 2. Validate recovery decision
-        // ---------------------------------------------------------
+        // =========================================================
+        // 2. VALIDATE RECOVERY DECISION
+        // =========================================================
 
         if (decision == null) {
+
             throw new IllegalArgumentException(
                     "Recovery decision cannot be null"
             );
         }
 
-        // ---------------------------------------------------------
-        // 3. Validate strategy
-        // ---------------------------------------------------------
+        // =========================================================
+        // 3. VALIDATE STRATEGY
+        // =========================================================
 
         if (decision.getStrategy()
                 != RecoveryStrategy.UPDATE_PAYMENT_METHOD) {
@@ -55,57 +58,102 @@ public class UpdatePaymentMethodHandler
             );
         }
 
-        // ---------------------------------------------------------
-        // 4. Log handler invocation
-        // ---------------------------------------------------------
+        // =========================================================
+        // 4. LOG HANDLER INVOCATION
+        // =========================================================
 
         log.info(
-                "Payment method update handler invoked. " +
-                        "recoveryCaseId={}, strategy={}, score={}, priority={}",
+                "Payment method update handler invoked. "
+                        + "recoveryCaseId={}, strategy={}, score={}, priority={}",
                 recoveryCase.getId(),
                 decision.getStrategy(),
                 decision.getRecoveryScore(),
                 decision.getPriority()
         );
 
-        // ---------------------------------------------------------
-        // 5. Execution boundary
-        // ---------------------------------------------------------
+        // =========================================================
+        // 5. MARK RECOVERY CASE IN PROGRESS
+        // =========================================================
+
+        recoveryCase.setStatus(
+                RecoveryCase.RecoveryStatus.IN_PROGRESS
+        );
+
+        log.info(
+                "Recovery case marked IN_PROGRESS for payment method update. "
+                        + "recoveryCaseId={}",
+                recoveryCase.getId()
+        );
+
+        // =========================================================
+        // 6. EXECUTION BOUNDARY
+        // =========================================================
 
         /*
-         * Actual payment-method update flow will be implemented later.
+         * This handler does not directly change the customer's
+         * payment method.
          *
-         * Future flow:
+         * Instead, it represents a successfully initiated
+         * recovery workflow.
+         *
+         * Expected flow:
          *
          * Recovery Case
          *       ↓
-         * Customer notification
+         * UPDATE_PAYMENT_METHOD
+         *       ↓
+         * Customer is asked to update payment method
          *       ↓
          * Customer updates payment method
          *       ↓
          * Payment retry
          *       ↓
-         * Payment webhook
+         * Razorpay webhook
          *       ↓
          * RECOVERED / FAILED
          *
-         * No payment has been recovered at this point.
+         * Therefore:
+         *
+         * Action execution = successful
+         * Payment recovery = not completed yet
          */
 
         log.info(
-                "Payment method update execution boundary reached. " +
-                        "recoveryCaseId={}",
+                "Payment method update recovery action initiated. "
+                        + "Awaiting customer action. "
+                        + "recoveryCaseId={}",
                 recoveryCase.getId()
         );
 
-        // ---------------------------------------------------------
-        // 6. Return recovery outcome
-        // ---------------------------------------------------------
+        // =========================================================
+        // 7. RETURN SUBMITTED
+        // =========================================================
+
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT return FAILED here.
+         *
+         * FAILED means the recovery action itself failed.
+         *
+         * SUBMITTED means:
+         *
+         * "The recovery action was successfully initiated,
+         * but the actual payment recovery is still pending."
+         *
+         * RecoveryActionExecutor will therefore mark:
+         *
+         * RecoveryAction -> EXECUTED
+         * RecoveryCase   -> IN_PROGRESS
+         *
+         * This is exactly what we want.
+         */
 
         return new RecoveryOutcome(
-                RecoveryOutcome.OutcomeStatus.FAILED,
+                RecoveryOutcome.OutcomeStatus.SUBMITTED,
                 BigDecimal.ZERO,
-                "Customer payment method update is required."
+                "Payment method update request initiated. "
+                        + "Awaiting customer action."
         );
     }
 }

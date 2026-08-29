@@ -42,41 +42,78 @@ import java.util.UUID;
 @Builder
 public class RecoveryCase {
 
+    // =========================================================
+    // ID
+    // =========================================================
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+
+    // =========================================================
+    // SUBSCRIPTION
+    // =========================================================
+
     /**
-     * Subscription whose failed payment needs recovery.
+     * Subscription whose payment failed.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(
             name = "subscription_id",
             nullable = false,
-            foreignKey = @ForeignKey(name = "fk_recovery_subscription")
+            foreignKey = @ForeignKey(
+                    name = "fk_recovery_subscription"
+            )
     )
     private Subscription subscription;
 
+
+    // =========================================================
+    // FAILED PAYMENT
+    // =========================================================
+
     /**
-     * Payment attempt that caused this recovery case.
+     * Payment attempt that created this recovery case.
      *
-     * One failed payment creates at most one recovery case.
+     * One failed payment can create only one recovery case.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(
             name = "failed_payment_id",
-            foreignKey = @ForeignKey(name = "fk_recovery_failed_payment")
+            nullable = false,
+            foreignKey = @ForeignKey(
+                    name = "fk_recovery_failed_payment"
+            )
     )
     private PaymentAttempt failedPayment;
 
+
+    // =========================================================
+    // STATUS
+    // =========================================================
+
+    /**
+     * Current lifecycle state of the recovery case.
+     */
     @Enumerated(EnumType.STRING)
     @Column(
             nullable = false,
             length = 20
     )
     @Builder.Default
-    private RecoveryStatus status = RecoveryStatus.OPEN;
+    private RecoveryStatus status =
+            RecoveryStatus.OPEN;
 
+
+    // =========================================================
+    // RECOVERY POTENTIAL
+    // =========================================================
+
+    /**
+     * Business classification of how valuable/recoverable
+     * this failed payment is.
+     */
     @Enumerated(EnumType.STRING)
     @Column(
             name = "recovery_potential",
@@ -84,10 +121,20 @@ public class RecoveryCase {
             length = 10
     )
     @Builder.Default
-    private RecoveryPotential recoveryPotential = RecoveryPotential.MEDIUM;
+    private RecoveryPotential recoveryPotential =
+            RecoveryPotential.MEDIUM;
+
+
+    // =========================================================
+    // ML RECOVERY SCORE
+    // =========================================================
 
     /**
-     * Recovery probability/score between 0.00 and 1.00.
+     * ML-generated probability that the payment can be recovered.
+     *
+     * Expected range:
+     *
+     * 0.00 -> 1.00
      */
     @Column(
             name = "recovery_score",
@@ -96,10 +143,16 @@ public class RecoveryCase {
             scale = 2
     )
     @Builder.Default
-    private BigDecimal recoveryScore = BigDecimal.ZERO;
+    private BigDecimal recoveryScore =
+            BigDecimal.ZERO;
+
+
+    // =========================================================
+    // AMOUNT AT RISK
+    // =========================================================
 
     /**
-     * Revenue currently at risk.
+     * Amount currently at risk because of the failed payment.
      */
     @Column(
             name = "amount_at_risk",
@@ -109,8 +162,16 @@ public class RecoveryCase {
     )
     private BigDecimal amountAtRisk;
 
+
+    // =========================================================
+    // AMOUNT RECOVERED
+    // =========================================================
+
     /**
-     * Revenue successfully recovered.
+     * Amount successfully recovered.
+     *
+     * This remains zero until a successful payment webhook
+     * confirms the recovery.
      */
     @Column(
             name = "amount_recovered",
@@ -119,8 +180,17 @@ public class RecoveryCase {
             scale = 2
     )
     @Builder.Default
-    private BigDecimal amountRecovered = BigDecimal.ZERO;
+    private BigDecimal amountRecovered =
+            BigDecimal.ZERO;
 
+
+    // =========================================================
+    // CREATED AT
+    // =========================================================
+
+    /**
+     * Time at which the recovery case was created.
+     */
     @Column(
             name = "created_at",
             nullable = false,
@@ -128,44 +198,100 @@ public class RecoveryCase {
     )
     private OffsetDateTime createdAt;
 
+
+    // =========================================================
+    // RESOLVED AT
+    // =========================================================
+
+    /**
+     * Time at which the recovery case reached a final state.
+     *
+     * This should remain null while the case is:
+     *
+     * OPEN
+     * IN_PROGRESS
+     * ESCALATED
+     */
     @Column(name = "resolved_at")
     private OffsetDateTime resolvedAt;
+
+
+    // =========================================================
+    // PRE-PERSIST
+    // =========================================================
 
     @PrePersist
     protected void onCreate() {
 
-        if (this.createdAt == null) {
-            this.createdAt = OffsetDateTime.now();
+        if (createdAt == null) {
+            createdAt = OffsetDateTime.now();
         }
 
-        if (this.amountRecovered == null) {
-            this.amountRecovered = BigDecimal.ZERO;
+        if (amountRecovered == null) {
+            amountRecovered = BigDecimal.ZERO;
         }
 
-        if (this.recoveryScore == null) {
-            this.recoveryScore = BigDecimal.ZERO;
+        if (recoveryScore == null) {
+            recoveryScore = BigDecimal.ZERO;
         }
 
-        if (this.status == null) {
-            this.status = RecoveryStatus.OPEN;
+        if (status == null) {
+            status = RecoveryStatus.OPEN;
         }
 
-        if (this.recoveryPotential == null) {
-            this.recoveryPotential = RecoveryPotential.MEDIUM;
+        if (recoveryPotential == null) {
+            recoveryPotential = RecoveryPotential.MEDIUM;
         }
     }
 
+
+    // =========================================================
+    // RECOVERY STATUS
+    // =========================================================
+
     public enum RecoveryStatus {
+
+        /**
+         * Recovery case has been created but no action
+         * has been executed yet.
+         */
         OPEN,
+
+        /**
+         * Recovery action has been submitted and the
+         * final payment result is still pending.
+         */
         IN_PROGRESS,
+
+        /**
+         * Payment recovery was confirmed successfully
+         * by the payment provider.
+         */
         RECOVERED,
+
+        /**
+         * Recovery attempt failed.
+         */
         FAILED,
+
+        /**
+         * Automated recovery could not safely continue
+         * and requires further handling.
+         */
         ESCALATED
     }
 
+
+    // =========================================================
+    // RECOVERY POTENTIAL
+    // =========================================================
+
     public enum RecoveryPotential {
+
         HIGH,
+
         MEDIUM,
+
         LOW
     }
 }

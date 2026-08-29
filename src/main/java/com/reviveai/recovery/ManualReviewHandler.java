@@ -8,10 +8,12 @@ import java.math.BigDecimal;
 
 @Slf4j
 @Component
-public class ManualReviewHandler implements RecoveryActionHandler {
+public class ManualReviewHandler
+        implements RecoveryActionHandler {
 
     @Override
     public RecoveryStrategy getStrategy() {
+
         return RecoveryStrategy.MANUAL_REVIEW;
     }
 
@@ -21,29 +23,31 @@ public class ManualReviewHandler implements RecoveryActionHandler {
             RecoveryDecision decision
     ) {
 
-        // ---------------------------------------------------------
-        // 1. Validate recovery case
-        // ---------------------------------------------------------
+        // =========================================================
+        // 1. VALIDATE RECOVERY CASE
+        // =========================================================
 
         if (recoveryCase == null) {
+
             throw new IllegalArgumentException(
                     "Recovery case cannot be null"
             );
         }
 
-        // ---------------------------------------------------------
-        // 2. Validate recovery decision
-        // ---------------------------------------------------------
+        // =========================================================
+        // 2. VALIDATE RECOVERY DECISION
+        // =========================================================
 
         if (decision == null) {
+
             throw new IllegalArgumentException(
                     "Recovery decision cannot be null"
             );
         }
 
-        // ---------------------------------------------------------
-        // 3. Validate strategy
-        // ---------------------------------------------------------
+        // =========================================================
+        // 3. VALIDATE STRATEGY
+        // =========================================================
 
         if (decision.getStrategy()
                 != RecoveryStrategy.MANUAL_REVIEW) {
@@ -54,9 +58,9 @@ public class ManualReviewHandler implements RecoveryActionHandler {
             );
         }
 
-        // ---------------------------------------------------------
-        // 4. Log manual review request
-        // ---------------------------------------------------------
+        // =========================================================
+        // 4. LOG MANUAL REVIEW REQUEST
+        // =========================================================
 
         log.info(
                 "Manual review handler invoked. " +
@@ -67,43 +71,61 @@ public class ManualReviewHandler implements RecoveryActionHandler {
                 decision.getPriority()
         );
 
-        // ---------------------------------------------------------
-        // 5. Execution boundary
-        // ---------------------------------------------------------
+        // =========================================================
+        // 5. MARK RECOVERY CASE IN PROGRESS
+        // =========================================================
 
-        /*
-         * Manual review workflow will be integrated later.
-         *
-         * Future implementation:
-         *
-         * Recovery Case
-         *       ↓
-         * Manual Review Queue
-         *       ↓
-         * Human Decision
-         *       ↓
-         * Recovery Action
-         *
-         * For now this handler only represents the execution
-         * boundary for recovery cases requiring human intervention.
-         *
-         * No money has been recovered at this point.
-         */
+        recoveryCase.setStatus(
+                RecoveryCase.RecoveryStatus.IN_PROGRESS
+        );
 
         log.info(
-                "Recovery case queued for manual review. " +
+                "Recovery case marked IN_PROGRESS for manual review. " +
                         "recoveryCaseId={}",
                 recoveryCase.getId()
         );
 
-        // ---------------------------------------------------------
-        // 6. Return recovery outcome
-        // ---------------------------------------------------------
+        // =========================================================
+        // 6. SUBMIT MANUAL REVIEW
+        // =========================================================
+
+        /*
+         * The recovery decision has successfully been routed
+         * to the manual-review workflow.
+         *
+         * The human review itself has not completed yet.
+         *
+         * Workflow:
+         *
+         * Recovery Case
+         *       ↓
+         * Manual review request
+         *       ↓
+         * Human decision
+         *       ↓
+         * Recovery action
+         *       ↓
+         * Payment webhook
+         *       ↓
+         * RECOVERED / FAILED
+         *
+         * Therefore this action is SUBMITTED, not FAILED.
+         */
+
+        log.info(
+                "Recovery case successfully submitted for manual review. " +
+                        "recoveryCaseId={}",
+                recoveryCase.getId()
+        );
+
+        // =========================================================
+        // 7. RETURN SUBMITTED
+        // =========================================================
 
         return new RecoveryOutcome(
-                RecoveryOutcome.OutcomeStatus.FAILED,
+                RecoveryOutcome.OutcomeStatus.SUBMITTED,
                 BigDecimal.ZERO,
-                "Recovery case requires manual review."
+                "Recovery case submitted for manual review."
         );
     }
 }

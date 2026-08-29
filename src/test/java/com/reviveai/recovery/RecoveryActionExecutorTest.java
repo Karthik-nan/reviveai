@@ -53,28 +53,30 @@ class RecoveryActionExecutorTest {
          * RecoveryActionExecutor builds its handler map inside
          * the constructor.
          *
-         * Therefore all handlers must expose their strategy
+         * Therefore every mocked handler must expose its strategy
          * before the executor is constructed.
-         *
-         * lenient() is intentional because individual tests
-         * execute only one strategy, while all handlers are still
-         * required to construct the executor's handler registry.
          */
 
-        lenient().when(retryPaymentHandler.getStrategy())
-                .thenReturn(RecoveryStrategy.RETRY_PAYMENT);
+        lenient()
+                .when(retryPaymentHandler.getStrategy())
+                .thenReturn(
+                        RecoveryStrategy.RETRY_PAYMENT
+                );
 
-        lenient().when(updatePaymentMethodHandler.getStrategy())
+        lenient()
+                .when(updatePaymentMethodHandler.getStrategy())
                 .thenReturn(
                         RecoveryStrategy.UPDATE_PAYMENT_METHOD
                 );
 
-        lenient().when(customerActionHandler.getStrategy())
+        lenient()
+                .when(customerActionHandler.getStrategy())
                 .thenReturn(
                         RecoveryStrategy.CUSTOMER_ACTION_REQUIRED
                 );
 
-        lenient().when(manualReviewHandler.getStrategy())
+        lenient()
+                .when(manualReviewHandler.getStrategy())
                 .thenReturn(
                         RecoveryStrategy.MANUAL_REVIEW
                 );
@@ -160,11 +162,18 @@ class RecoveryActionExecutorTest {
                 )
         ).thenReturn(pendingAction);
 
+        /*
+         * The current RetryPaymentHandler / mocked handler
+         * returns FAILED.
+         *
+         * Therefore RecoveryActionExecutor must mark the
+         * action FAILED.
+         */
         RecoveryOutcome outcome =
                 new RecoveryOutcome(
                         RecoveryOutcome.OutcomeStatus.FAILED,
                         BigDecimal.ZERO,
-                        "Payment retry request has not yet been integrated with Razorpay."
+                        "Payment retry request failed."
                 );
 
         when(
@@ -203,6 +212,10 @@ class RecoveryActionExecutorTest {
         RecoveryAction secondSavedAction =
                 savedActions.get(1);
 
+        // --------------------------------------------------------
+        // First save = PENDING
+        // --------------------------------------------------------
+
         assertEquals(
                 RecoveryAction.ActionStatus.PENDING,
                 firstSavedAction.getStatus()
@@ -228,14 +241,27 @@ class RecoveryActionExecutorTest {
                 firstSavedAction.getReason()
         );
 
+        // --------------------------------------------------------
+        // Second save = FAILED
+        // --------------------------------------------------------
+
         assertEquals(
-                RecoveryAction.ActionStatus.EXECUTED,
+                RecoveryAction.ActionStatus.FAILED,
                 secondSavedAction.getStatus()
         );
 
-        assertNotNull(
+        assertNull(
                 secondSavedAction.getExecutedAt()
         );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.FAILED,
+                recoveryCase.getStatus()
+        );
+
+        // --------------------------------------------------------
+        // Guard
+        // --------------------------------------------------------
 
         verify(
                 recoveryDecisionGuard,
@@ -245,6 +271,10 @@ class RecoveryActionExecutorTest {
                 decision
         );
 
+        // --------------------------------------------------------
+        // Correct handler executed
+        // --------------------------------------------------------
+
         verify(
                 retryPaymentHandler,
                 times(1)
@@ -252,6 +282,10 @@ class RecoveryActionExecutorTest {
                 recoveryCase,
                 decision
         );
+
+        // --------------------------------------------------------
+        // Other handlers must not execute
+        // --------------------------------------------------------
 
         verify(
                 updatePaymentMethodHandler,
@@ -337,6 +371,11 @@ class RecoveryActionExecutorTest {
                 )
         ).thenReturn(pendingAction);
 
+        /*
+         * Current UpdatePaymentMethodHandler returns FAILED
+         * because the actual customer payment-method update
+         * workflow has not been implemented yet.
+         */
         RecoveryOutcome outcome =
                 new RecoveryOutcome(
                         RecoveryOutcome.OutcomeStatus.FAILED,
@@ -385,12 +424,17 @@ class RecoveryActionExecutorTest {
         ).handle(any(), any());
 
         assertEquals(
-                RecoveryAction.ActionStatus.EXECUTED,
+                RecoveryAction.ActionStatus.FAILED,
                 pendingAction.getStatus()
         );
 
-        assertNotNull(
+        assertNull(
                 pendingAction.getExecutedAt()
+        );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.FAILED,
+                recoveryCase.getStatus()
         );
     }
 
@@ -462,6 +506,10 @@ class RecoveryActionExecutorTest {
                 )
         ).thenReturn(pendingAction);
 
+        /*
+         * Current handler returns FAILED because the customer
+         * action workflow has not been implemented yet.
+         */
         RecoveryOutcome outcome =
                 new RecoveryOutcome(
                         RecoveryOutcome.OutcomeStatus.FAILED,
@@ -510,12 +558,17 @@ class RecoveryActionExecutorTest {
         ).handle(any(), any());
 
         assertEquals(
-                RecoveryAction.ActionStatus.EXECUTED,
+                RecoveryAction.ActionStatus.FAILED,
                 pendingAction.getStatus()
         );
 
-        assertNotNull(
+        assertNull(
                 pendingAction.getExecutedAt()
+        );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.FAILED,
+                recoveryCase.getStatus()
         );
     }
 
@@ -587,6 +640,10 @@ class RecoveryActionExecutorTest {
                 )
         ).thenReturn(pendingAction);
 
+        /*
+         * Current ManualReviewHandler returns FAILED because
+         * the manual-review queue has not been implemented yet.
+         */
         RecoveryOutcome outcome =
                 new RecoveryOutcome(
                         RecoveryOutcome.OutcomeStatus.FAILED,
@@ -635,12 +692,17 @@ class RecoveryActionExecutorTest {
         ).handle(any(), any());
 
         assertEquals(
-                RecoveryAction.ActionStatus.EXECUTED,
+                RecoveryAction.ActionStatus.FAILED,
                 pendingAction.getStatus()
         );
 
-        assertNotNull(
+        assertNull(
                 pendingAction.getExecutedAt()
+        );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.FAILED,
+                recoveryCase.getStatus()
         );
     }
 
@@ -1158,7 +1220,356 @@ class RecoveryActionExecutorTest {
                 new RecoveryOutcome(
                         RecoveryOutcome.OutcomeStatus.FAILED,
                         BigDecimal.ZERO,
-                        "Payment retry request has not yet been integrated with Razorpay."
+                        "Payment retry request failed."
+                );
+
+        when(
+                retryPaymentHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenReturn(outcome);
+
+        recoveryActionExecutor.execute(
+                recoveryCase,
+                decision
+        );
+
+        /*
+         * First save:
+         *     new action -> PENDING
+         *
+         * Second save:
+         *     new action -> FAILED
+         */
+        verify(
+                recoveryActionRepository,
+                times(2)
+        ).save(any(RecoveryAction.class));
+
+        verify(
+                retryPaymentHandler,
+                times(1)
+        ).handle(
+                recoveryCase,
+                decision
+        );
+
+        assertEquals(
+                RecoveryAction.ActionStatus.FAILED,
+                newPendingAction.getStatus()
+        );
+
+        assertNull(
+                newPendingAction.getExecutedAt()
+        );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.FAILED,
+                recoveryCase.getStatus()
+        );
+    }
+
+    // ============================================================
+    // HANDLER EXCEPTION
+    // ============================================================
+
+    @Test
+    void shouldMarkActionFailedWhenHandlerThrowsException() {
+
+        RecoveryCase recoveryCase =
+                RecoveryCase.builder()
+                        .id(UUID.randomUUID())
+                        .build();
+
+        RecoveryDecision decision =
+                RecoveryDecision.builder()
+                        .strategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .priority(
+                                RecoveryPriority.MEDIUM_HIGH
+                        )
+                        .recoveryScore(
+                                new BigDecimal("0.70")
+                        )
+                        .reason(
+                                "Payment failed"
+                        )
+                        .build();
+
+        approveDecision(
+                recoveryCase,
+                decision
+        );
+
+        when(
+                recoveryActionRepository
+                        .findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
+                                recoveryCase.getId(),
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+        ).thenReturn(Optional.empty());
+
+        RecoveryAction pendingAction =
+                RecoveryAction.builder()
+                        .id(30L)
+                        .recoveryCase(recoveryCase)
+                        .strategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .priority(
+                                RecoveryPriority.MEDIUM_HIGH
+                        )
+                        .recoveryScore(
+                                new BigDecimal("0.70")
+                        )
+                        .status(
+                                RecoveryAction.ActionStatus.PENDING
+                        )
+                        .reason(
+                                "Payment failed"
+                        )
+                        .build();
+
+        when(
+                recoveryActionRepository.save(
+                        any(RecoveryAction.class)
+                )
+        ).thenReturn(pendingAction);
+
+        RuntimeException exception =
+                new RuntimeException(
+                        "Razorpay service unavailable"
+                );
+
+        when(
+                retryPaymentHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenThrow(exception);
+
+        RuntimeException thrown =
+                assertThrows(
+                        RuntimeException.class,
+                        () ->
+                                recoveryActionExecutor.execute(
+                                        recoveryCase,
+                                        decision
+                                )
+                );
+
+        assertSame(
+                exception,
+                thrown
+        );
+
+        assertEquals(
+                RecoveryAction.ActionStatus.FAILED,
+                pendingAction.getStatus()
+        );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.FAILED,
+                recoveryCase.getStatus()
+        );
+
+        verify(
+                recoveryActionRepository,
+                times(2)
+        ).save(any(RecoveryAction.class));
+
+        verify(
+                retryPaymentHandler,
+                times(1)
+        ).handle(
+                recoveryCase,
+                decision
+        );
+    }
+
+    // ============================================================
+    // NULL OUTCOME
+    // ============================================================
+
+    @Test
+    void shouldMarkActionFailedWhenHandlerReturnsNull() {
+
+        RecoveryCase recoveryCase =
+                RecoveryCase.builder()
+                        .id(UUID.randomUUID())
+                        .build();
+
+        RecoveryDecision decision =
+                RecoveryDecision.builder()
+                        .strategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .priority(
+                                RecoveryPriority.MEDIUM_HIGH
+                        )
+                        .recoveryScore(
+                                new BigDecimal("0.70")
+                        )
+                        .reason(
+                                "Payment failed"
+                        )
+                        .build();
+
+        approveDecision(
+                recoveryCase,
+                decision
+        );
+
+        when(
+                recoveryActionRepository
+                        .findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
+                                recoveryCase.getId(),
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+        ).thenReturn(Optional.empty());
+
+        RecoveryAction pendingAction =
+                RecoveryAction.builder()
+                        .id(31L)
+                        .recoveryCase(recoveryCase)
+                        .strategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .priority(
+                                RecoveryPriority.MEDIUM_HIGH
+                        )
+                        .recoveryScore(
+                                new BigDecimal("0.70")
+                        )
+                        .status(
+                                RecoveryAction.ActionStatus.PENDING
+                        )
+                        .reason(
+                                "Payment failed"
+                        )
+                        .build();
+
+        when(
+                recoveryActionRepository.save(
+                        any(RecoveryAction.class)
+                )
+        ).thenReturn(pendingAction);
+
+        when(
+                retryPaymentHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenReturn(null);
+
+        assertThrows(
+                IllegalStateException.class,
+                () ->
+                        recoveryActionExecutor.execute(
+                                recoveryCase,
+                                decision
+                        )
+        );
+
+        assertEquals(
+                RecoveryAction.ActionStatus.FAILED,
+                pendingAction.getStatus()
+        );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.FAILED,
+                recoveryCase.getStatus()
+        );
+
+        verify(
+                recoveryActionRepository,
+                times(2)
+        ).save(any(RecoveryAction.class));
+
+        verify(
+                retryPaymentHandler,
+                times(1)
+        ).handle(
+                recoveryCase,
+                decision
+        );
+    }
+
+    // ============================================================
+    // SUBMITTED OUTCOME
+    // ============================================================
+
+    @Test
+    void shouldMarkActionExecutedButCaseInProgressWhenRetryIsSubmitted() {
+
+        RecoveryCase recoveryCase =
+                RecoveryCase.builder()
+                        .id(UUID.randomUUID())
+                        .build();
+
+        RecoveryDecision decision =
+                RecoveryDecision.builder()
+                        .strategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .priority(
+                                RecoveryPriority.MEDIUM_HIGH
+                        )
+                        .recoveryScore(
+                                new BigDecimal("0.70")
+                        )
+                        .reason(
+                                "Retry payment"
+                        )
+                        .build();
+
+        approveDecision(
+                recoveryCase,
+                decision
+        );
+
+        when(
+                recoveryActionRepository
+                        .findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
+                                recoveryCase.getId(),
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+        ).thenReturn(Optional.empty());
+
+        RecoveryAction pendingAction =
+                RecoveryAction.builder()
+                        .id(32L)
+                        .recoveryCase(recoveryCase)
+                        .strategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .priority(
+                                RecoveryPriority.MEDIUM_HIGH
+                        )
+                        .recoveryScore(
+                                new BigDecimal("0.70")
+                        )
+                        .status(
+                                RecoveryAction.ActionStatus.PENDING
+                        )
+                        .reason(
+                                "Retry payment"
+                        )
+                        .build();
+
+        when(
+                recoveryActionRepository.save(
+                        any(RecoveryAction.class)
+                )
+        ).thenReturn(pendingAction);
+
+        RecoveryOutcome outcome =
+                new RecoveryOutcome(
+                        RecoveryOutcome.OutcomeStatus.SUBMITTED,
+                        BigDecimal.ZERO,
+                        "Payment retry submitted successfully."
                 );
 
         when(
@@ -1178,6 +1589,20 @@ class RecoveryActionExecutorTest {
                 times(2)
         ).save(any(RecoveryAction.class));
 
+        assertEquals(
+                RecoveryAction.ActionStatus.EXECUTED,
+                pendingAction.getStatus()
+        );
+
+        assertNotNull(
+                pendingAction.getExecutedAt()
+        );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.IN_PROGRESS,
+                recoveryCase.getStatus()
+        );
+
         verify(
                 retryPaymentHandler,
                 times(1)
@@ -1185,14 +1610,132 @@ class RecoveryActionExecutorTest {
                 recoveryCase,
                 decision
         );
+    }
+
+    // ============================================================
+    // RECOVERED OUTCOME
+    // ============================================================
+
+    @Test
+    void shouldMarkActionExecutedAndCaseRecoveredWhenPaymentRecovered() {
+
+        RecoveryCase recoveryCase =
+                RecoveryCase.builder()
+                        .id(UUID.randomUUID())
+                        .build();
+
+        RecoveryDecision decision =
+                RecoveryDecision.builder()
+                        .strategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .priority(
+                                RecoveryPriority.MEDIUM_HIGH
+                        )
+                        .recoveryScore(
+                                new BigDecimal("0.90")
+                        )
+                        .reason(
+                                "Payment retry succeeded"
+                        )
+                        .build();
+
+        approveDecision(
+                recoveryCase,
+                decision
+        );
+
+        when(
+                recoveryActionRepository
+                        .findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
+                                recoveryCase.getId(),
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+        ).thenReturn(Optional.empty());
+
+        RecoveryAction pendingAction =
+                RecoveryAction.builder()
+                        .id(33L)
+                        .recoveryCase(recoveryCase)
+                        .strategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .priority(
+                                RecoveryPriority.MEDIUM_HIGH
+                        )
+                        .recoveryScore(
+                                new BigDecimal("0.90")
+                        )
+                        .status(
+                                RecoveryAction.ActionStatus.PENDING
+                        )
+                        .reason(
+                                "Payment retry succeeded"
+                        )
+                        .build();
+
+        when(
+                recoveryActionRepository.save(
+                        any(RecoveryAction.class)
+                )
+        ).thenReturn(pendingAction);
+
+        BigDecimal recoveredAmount =
+                new BigDecimal("999.00");
+
+        RecoveryOutcome outcome =
+                new RecoveryOutcome(
+                        RecoveryOutcome.OutcomeStatus.RECOVERED,
+                        recoveredAmount,
+                        "Payment recovered successfully."
+                );
+
+        when(
+                retryPaymentHandler.handle(
+                        recoveryCase,
+                        decision
+                )
+        ).thenReturn(outcome);
+
+        recoveryActionExecutor.execute(
+                recoveryCase,
+                decision
+        );
+
+        verify(
+                recoveryActionRepository,
+                times(2)
+        ).save(any(RecoveryAction.class));
 
         assertEquals(
                 RecoveryAction.ActionStatus.EXECUTED,
-                newPendingAction.getStatus()
+                pendingAction.getStatus()
         );
 
         assertNotNull(
-                newPendingAction.getExecutedAt()
+                pendingAction.getExecutedAt()
+        );
+
+        assertEquals(
+                RecoveryCase.RecoveryStatus.RECOVERED,
+                recoveryCase.getStatus()
+        );
+
+        assertEquals(
+                recoveredAmount,
+                recoveryCase.getAmountRecovered()
+        );
+
+        assertNotNull(
+                recoveryCase.getResolvedAt()
+        );
+
+        verify(
+                retryPaymentHandler,
+                times(1)
+        ).handle(
+                recoveryCase,
+                decision
         );
     }
 
@@ -1221,3 +1764,4 @@ class RecoveryActionExecutorTest {
         ).thenReturn(guardResult);
     }
 }
+
