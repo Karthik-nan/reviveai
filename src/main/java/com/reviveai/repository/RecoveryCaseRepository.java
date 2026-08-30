@@ -12,19 +12,53 @@ import java.util.UUID;
 public interface RecoveryCaseRepository
         extends JpaRepository<RecoveryCase, UUID> {
 
+    // =========================================================
+    // FIND BY FAILED PAYMENT
+    // =========================================================
+
     Optional<RecoveryCase> findByFailedPaymentId(
             UUID failedPaymentId
     );
+
+    // =========================================================
+    // FIND BY STATUS
+    // =========================================================
 
     List<RecoveryCase> findByStatus(
             RecoveryCase.RecoveryStatus status
     );
 
+    // =========================================================
+    // FIND BY RECOVERY POTENTIAL
+    // =========================================================
+
     List<RecoveryCase> findByRecoveryPotential(
             RecoveryCase.RecoveryPotential recoveryPotential
     );
 
+    // =========================================================
+    // FIND BY SUBSCRIPTION
+    // =========================================================
+
     List<RecoveryCase> findBySubscriptionId(
             UUID subscriptionId
+    );
+
+    // =========================================================
+    // FIND BY SUBSCRIPTION + STATUS
+    // =========================================================
+
+    List<RecoveryCase> findBySubscriptionAndStatus(
+            com.reviveai.entity.Subscription subscription,
+            RecoveryCase.RecoveryStatus status
+    );
+
+    // =========================================================
+    // FIND BY SUBSCRIPTION ID + STATUS
+    // =========================================================
+
+    List<RecoveryCase> findBySubscriptionIdAndStatus(
+            UUID subscriptionId,
+            RecoveryCase.RecoveryStatus status
     );
 }

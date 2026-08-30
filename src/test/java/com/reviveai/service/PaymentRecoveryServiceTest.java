@@ -2,7 +2,6 @@ package com.reviveai.service;
 
 import com.reviveai.agent.RecoveryAgentRequest;
 import com.reviveai.agent.RecoveryAgentResponse;
-import com.reviveai.agent.RecoveryAgentService;
 import com.reviveai.dto.PaymentFailedEvent;
 import com.reviveai.entity.PaymentAttempt;
 import com.reviveai.entity.RecoveryCase;
@@ -12,11 +11,12 @@ import com.reviveai.ml.RecoveryFeatureMapper;
 import com.reviveai.ml.RecoveryPredictionRequest;
 import com.reviveai.ml.RecoveryPredictionResponse;
 import com.reviveai.ml.RecoveryPredictionService;
-import com.reviveai.recovery.RecoveryActionExecutor;
+import com.reviveai.recovery.RecoveryActionOrchestrator;
 import com.reviveai.recovery.RecoveryDecision;
 import com.reviveai.recovery.RecoveryPriority;
 import com.reviveai.recovery.RecoveryStrategy;
 import com.reviveai.recovery.RecoveryStrategyEngine;
+import com.reviveai.recovery.RecoveryDecisionOrchestrator;
 import com.reviveai.repository.PaymentAttemptRepository;
 import com.reviveai.repository.RecoveryCaseRepository;
 import com.reviveai.repository.SubscriptionRepository;
@@ -32,7 +32,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -66,7 +66,10 @@ class PaymentRecoveryServiceTest {
     private RecoveryStrategyEngine recoveryStrategyEngine;
 
     @Mock
-    private RecoveryActionExecutor recoveryActionExecutor;
+    private RecoveryDecisionOrchestrator recoveryDecisionOrchestrator;
+
+    @Mock
+    private RecoveryActionOrchestrator recoveryActionOrchestrator;
 
     // =========================================================
     // ML
@@ -77,13 +80,6 @@ class PaymentRecoveryServiceTest {
 
     @Mock
     private RecoveryPredictionService recoveryPredictionService;
-
-    // =========================================================
-    // AI AGENT
-    // =========================================================
-
-    @Mock
-    private RecoveryAgentService recoveryAgentService;
 
     // =========================================================
     // SERVICE UNDER TEST
@@ -220,6 +216,10 @@ class PaymentRecoveryServiceTest {
 
         // =====================================================
         // RECOVERY CASE
+        //
+        // 7000 paise = ₹70.00
+        // ₹70.00 <= ₹5,000
+        // Therefore recovery potential = HIGH
         // =====================================================
 
         RecoveryCase savedRecoveryCase =
@@ -257,7 +257,9 @@ class PaymentRecoveryServiceTest {
                 subscriptionHealthEvaluator.evaluateHealth(
                         subscription
                 )
-        ).thenReturn(health);
+        ).thenReturn(
+                health
+        );
 
         // =====================================================
         // ML REQUEST
@@ -321,10 +323,10 @@ class PaymentRecoveryServiceTest {
                         .build();
 
         // =====================================================
-        // AI AGENT RESPONSE
+        // FINAL POLICY DECISION
         // =====================================================
 
-        RecoveryAgentResponse agentResponse =
+        RecoveryAgentResponse finalDecision =
                 RecoveryAgentResponse.builder()
                         .recommendedStrategy(
                                 RecoveryStrategy.RETRY_PAYMENT
@@ -385,10 +387,8 @@ class PaymentRecoveryServiceTest {
         //
         // IMPORTANT:
         //
-        // PaymentRecoveryService saves RecoveryCase ONLY ONCE.
-        //
-        // After that, Hibernate dirty checking handles changes
-        // because the entity is managed inside the transaction.
+        // PaymentRecoveryService saves RecoveryCase once.
+        // No recoveryCaseId variable is required here.
         // =====================================================
 
         when(
@@ -436,15 +436,30 @@ class PaymentRecoveryServiceTest {
         );
 
         // =====================================================
-        // MOCK: AI AGENT
+        // MOCK: DECISION ORCHESTRATOR
+        //
+        // PaymentRecoveryService calls this, not
+        // RecoveryAgentService directly.
         // =====================================================
 
         when(
-                recoveryAgentService.recommend(
+                recoveryDecisionOrchestrator.decide(
                         any(RecoveryAgentRequest.class)
                 )
         ).thenReturn(
-                agentResponse
+                finalDecision
+        );
+
+        // =====================================================
+        // MOCK: ACTION ORCHESTRATOR
+        // =====================================================
+
+        doNothing().when(
+                recoveryActionOrchestrator
+        ).execute(
+                any(RecoveryCase.class),
+                any(RecoveryAgentRequest.class),
+                any(RecoveryAgentResponse.class)
         );
 
         // =====================================================
@@ -452,8 +467,9 @@ class PaymentRecoveryServiceTest {
         // =====================================================
 
         assertDoesNotThrow(
-                () -> paymentRecoveryService
-                        .processPaymentFailure(event)
+                () ->
+                        paymentRecoveryService
+                                .processPaymentFailure(event)
         );
 
         // =====================================================
@@ -575,9 +591,6 @@ class PaymentRecoveryServiceTest {
 
         // =====================================================
         // VERIFY: RECOVERY CASE
-        //
-        // IMPORTANT:
-        // Only ONE save.
         // =====================================================
 
         verify(
@@ -611,6 +624,11 @@ class PaymentRecoveryServiceTest {
                 savedRecoveryCase.getAmountAtRisk()
         );
 
+        assertEquals(
+                BigDecimal.ZERO,
+                savedRecoveryCase.getAmountRecovered()
+        );
+
         // =====================================================
         // VERIFY: ML FEATURE MAPPER
         // =====================================================
@@ -633,12 +651,14 @@ class PaymentRecoveryServiceTest {
                 );
 
         verify(
-                recoveryPredictionService
+                recoveryPredictionService,
+                times(1)
         ).predict(
                 predictionRequestCaptor.capture()
         );
 
-        RecoveryPredictionRequest capturedPredictionRequest =
+        RecoveryPredictionRequest
+                capturedPredictionRequest =
                 predictionRequestCaptor.getValue();
 
         assertNotNull(
@@ -647,17 +667,20 @@ class PaymentRecoveryServiceTest {
 
         assertEquals(
                 new BigDecimal("70.00"),
-                capturedPredictionRequest.getPaymentAmount()
+                capturedPredictionRequest
+                        .getPaymentAmount()
         );
 
         assertEquals(
                 0,
-                capturedPredictionRequest.getRetryCount()
+                capturedPredictionRequest
+                        .getRetryCount()
         );
 
         assertEquals(
                 0,
-                capturedPredictionRequest.getDaysPastDue()
+                capturedPredictionRequest
+                        .getDaysPastDue()
         );
 
         assertEquals(
@@ -686,18 +709,8 @@ class PaymentRecoveryServiceTest {
 
         assertEquals(
                 "INSUFFICIENT_FUNDS",
-                capturedPredictionRequest.getErrorCode()
-        );
-
-        // =====================================================
-        // VERIFY: ML PREDICTION
-        // =====================================================
-
-        verify(
-                recoveryPredictionService,
-                times(1)
-        ).predict(
-                any(RecoveryPredictionRequest.class)
+                capturedPredictionRequest
+                        .getErrorCode()
         );
 
         // =====================================================
@@ -712,18 +725,7 @@ class PaymentRecoveryServiceTest {
         );
 
         // =====================================================
-        // VERIFY: AI AGENT
-        // =====================================================
-
-        verify(
-                recoveryAgentService,
-                times(1)
-        ).recommend(
-                any(RecoveryAgentRequest.class)
-        );
-
-        // =====================================================
-        // CAPTURE AI REQUEST
+        // VERIFY: DECISION ORCHESTRATOR
         // =====================================================
 
         ArgumentCaptor<RecoveryAgentRequest>
@@ -733,8 +735,9 @@ class PaymentRecoveryServiceTest {
                 );
 
         verify(
-                recoveryAgentService
-        ).recommend(
+                recoveryDecisionOrchestrator,
+                times(1)
+        ).decide(
                 agentRequestCaptor.capture()
         );
 
@@ -791,33 +794,12 @@ class PaymentRecoveryServiceTest {
         );
 
         // =====================================================
-        // VERIFY FINAL ACTION
+        // VERIFY FINAL DECISION
         // =====================================================
-
-        ArgumentCaptor<RecoveryDecision>
-                decisionCaptor =
-                ArgumentCaptor.forClass(
-                        RecoveryDecision.class
-                );
-
-        verify(
-                recoveryActionExecutor,
-                times(1)
-        ).execute(
-                eq(savedRecoveryCase),
-                decisionCaptor.capture()
-        );
-
-        RecoveryDecision finalDecision =
-                decisionCaptor.getValue();
-
-        assertNotNull(
-                finalDecision
-        );
 
         assertEquals(
                 RecoveryStrategy.RETRY_PAYMENT,
-                finalDecision.getStrategy()
+                finalDecision.getRecommendedStrategy()
         );
 
         assertEquals(
@@ -826,14 +808,36 @@ class PaymentRecoveryServiceTest {
         );
 
         assertEquals(
-                new BigDecimal("0.75"),
-                finalDecision.getRecoveryScore()
-        );
-
-        assertEquals(
-                agentResponse.getReason(),
+                "Retry payment because the failure " +
+                        "was caused by insufficient funds.",
                 finalDecision.getReason()
         );
+
+        assertFalse(
+                finalDecision.isFallbackUsed()
+        );
+
+        // =====================================================
+        // VERIFY ACTION ORCHESTRATOR
+        // =====================================================
+
+        verify(
+                recoveryActionOrchestrator,
+                times(1)
+        ).execute(
+                eq(savedRecoveryCase),
+                eq(capturedAgentRequest),
+                eq(finalDecision)
+        );
+
+        // =====================================================
+        // VERIFY NO DIRECT AGENT INTERACTION
+        // =====================================================
+
+        // The PaymentRecoveryService delegates the agent/policy
+        // decision through RecoveryDecisionOrchestrator.
+        // Therefore there should be no direct RecoveryAgentService
+        // interaction from this test.
     }
 
     // =========================================================
@@ -942,18 +946,19 @@ class PaymentRecoveryServiceTest {
         );
 
         verify(
-                recoveryAgentService,
+                recoveryDecisionOrchestrator,
                 never()
-        ).recommend(
+        ).decide(
                 any(RecoveryAgentRequest.class)
         );
 
         verify(
-                recoveryActionExecutor,
+                recoveryActionOrchestrator,
                 never()
         ).execute(
                 any(RecoveryCase.class),
-                any(RecoveryDecision.class)
+                any(RecoveryAgentRequest.class),
+                any(RecoveryAgentResponse.class)
         );
     }
 
@@ -975,8 +980,8 @@ class PaymentRecoveryServiceTest {
                 recoveryStrategyEngine,
                 recoveryFeatureMapper,
                 recoveryPredictionService,
-                recoveryActionExecutor,
-                recoveryAgentService
+                recoveryDecisionOrchestrator,
+                recoveryActionOrchestrator
         );
     }
 
@@ -1001,8 +1006,8 @@ class PaymentRecoveryServiceTest {
                 recoveryStrategyEngine,
                 recoveryFeatureMapper,
                 recoveryPredictionService,
-                recoveryActionExecutor,
-                recoveryAgentService
+                recoveryDecisionOrchestrator,
+                recoveryActionOrchestrator
         );
     }
 
@@ -1032,8 +1037,8 @@ class PaymentRecoveryServiceTest {
                 recoveryStrategyEngine,
                 recoveryFeatureMapper,
                 recoveryPredictionService,
-                recoveryActionExecutor,
-                recoveryAgentService
+                recoveryDecisionOrchestrator,
+                recoveryActionOrchestrator
         );
     }
 
@@ -1070,8 +1075,8 @@ class PaymentRecoveryServiceTest {
                 recoveryStrategyEngine,
                 recoveryFeatureMapper,
                 recoveryPredictionService,
-                recoveryActionExecutor,
-                recoveryAgentService
+                recoveryDecisionOrchestrator,
+                recoveryActionOrchestrator
         );
     }
 
@@ -1108,8 +1113,8 @@ class PaymentRecoveryServiceTest {
                 recoveryStrategyEngine,
                 recoveryFeatureMapper,
                 recoveryPredictionService,
-                recoveryActionExecutor,
-                recoveryAgentService
+                recoveryDecisionOrchestrator,
+                recoveryActionOrchestrator
         );
     }
 
@@ -1217,18 +1222,19 @@ class PaymentRecoveryServiceTest {
         );
 
         verify(
-                recoveryAgentService,
+                recoveryDecisionOrchestrator,
                 never()
-        ).recommend(
+        ).decide(
                 any(RecoveryAgentRequest.class)
         );
 
         verify(
-                recoveryActionExecutor,
+                recoveryActionOrchestrator,
                 never()
         ).execute(
                 any(RecoveryCase.class),
-                any(RecoveryDecision.class)
+                any(RecoveryAgentRequest.class),
+                any(RecoveryAgentResponse.class)
         );
     }
 }

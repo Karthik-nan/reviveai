@@ -2,7 +2,6 @@ package com.reviveai.service;
 
 import com.reviveai.agent.RecoveryAgentRequest;
 import com.reviveai.agent.RecoveryAgentResponse;
-import com.reviveai.agent.RecoveryAgentService;
 import com.reviveai.dto.PaymentFailedEvent;
 import com.reviveai.entity.PaymentAttempt;
 import com.reviveai.entity.RecoveryCase;
@@ -12,8 +11,9 @@ import com.reviveai.ml.RecoveryFeatureMapper;
 import com.reviveai.ml.RecoveryPredictionRequest;
 import com.reviveai.ml.RecoveryPredictionResponse;
 import com.reviveai.ml.RecoveryPredictionService;
-import com.reviveai.recovery.RecoveryActionExecutor;
+import com.reviveai.recovery.RecoveryActionOrchestrator;
 import com.reviveai.recovery.RecoveryDecision;
+import com.reviveai.recovery.RecoveryDecisionOrchestrator;
 import com.reviveai.recovery.RecoveryPriority;
 import com.reviveai.recovery.RecoveryStrategy;
 import com.reviveai.recovery.RecoveryStrategyEngine;
@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -43,8 +44,6 @@ public class PaymentRecoveryService {
 
     private final RecoveryStrategyEngine recoveryStrategyEngine;
 
-    private final RecoveryActionExecutor recoveryActionExecutor;
-
     // =========================================================
     // TIER 2 ML
     // =========================================================
@@ -54,10 +53,17 @@ public class PaymentRecoveryService {
     private final RecoveryPredictionService recoveryPredictionService;
 
     // =========================================================
-    // AI RECOVERY AGENT
+    // RECOVERY DECISION ORCHESTRATION
     // =========================================================
 
-    private final RecoveryAgentService recoveryAgentService;
+    private final RecoveryDecisionOrchestrator recoveryDecisionOrchestrator;
+
+    // =========================================================
+    // RECOVERY ACTION ORCHESTRATION
+    // =========================================================
+
+    private final RecoveryActionOrchestrator recoveryActionOrchestrator;
+
 
     // =========================================================
     // PROCESS PAYMENT FAILURE
@@ -259,15 +265,6 @@ public class PaymentRecoveryService {
         // =====================================================
         // 9. CONVERT RAZORPAY AMOUNT
         // =====================================================
-
-        /*
-         * Razorpay amount is represented in the smallest
-         * currency unit.
-         *
-         * Example:
-         *
-         * 49900 paise = ₹499.00
-         */
 
         BigDecimal amount =
                 BigDecimal.valueOf(
@@ -602,22 +599,6 @@ public class PaymentRecoveryService {
         // 19. STORE ML SCORE
         // =====================================================
 
-        /*
-         * IMPORTANT:
-         *
-         * recoveryCase is already a managed JPA entity because
-         * this entire method runs inside one transaction.
-         *
-         * Therefore an additional:
-         *
-         * recoveryCaseRepository.save(recoveryCase)
-         *
-         * is unnecessary here.
-         *
-         * Hibernate dirty checking will persist recoveryScore
-         * automatically at transaction commit.
-         */
-
         recoveryCase.setRecoveryScore(
                 recoveryScore
         );
@@ -721,38 +702,32 @@ public class PaymentRecoveryService {
                         .build();
 
         log.info(
-                "Sending recovery case to AI agent. " +
+                "Recovery decision pipeline starting. " +
                         "recoveryCaseId={}, score={}, " +
-                        "recoveryPotential={}, errorCode={}, " +
-                        "retryCount={}, failureRate={}, " +
                         "ruleBasedStrategy={}, ruleBasedPriority={}",
                 recoveryCase.getId(),
                 recoveryScore,
-                recoveryCase.getRecoveryPotential(),
-                payment.getErrorCode(),
-                predictionRequest.getRetryCount(),
-                predictionRequest.getPaymentFailureRate(),
                 ruleBasedStrategy,
                 ruleBasedPriority
         );
 
         // =====================================================
-        // 22. AI AGENT RECOMMENDATION
+        // 22. AGENT → POLICY DECISION ORCHESTRATION
         // =====================================================
 
-        RecoveryAgentResponse agentResponse;
+        RecoveryAgentResponse finalDecision;
 
         try {
 
-            agentResponse =
-                    recoveryAgentService.recommend(
+            finalDecision =
+                    recoveryDecisionOrchestrator.decide(
                             agentRequest
                     );
 
         } catch (Exception exception) {
 
             log.error(
-                    "Recovery AI agent failed. " +
+                    "Recovery decision orchestration failed. " +
                             "recoveryCaseId={}",
                     recoveryCase.getId(),
                     exception
@@ -760,137 +735,94 @@ public class PaymentRecoveryService {
 
             escalateRecoveryCase(
                     recoveryCase,
-                    "AI recovery agent failed"
+                    "Recovery decision orchestration failed"
             );
 
             return;
         }
 
         // =====================================================
-        // 23. VALIDATE AGENT RESPONSE
+        // 23. VALIDATE FINAL POLICY DECISION
         // =====================================================
 
-        if (agentResponse == null) {
+        if (finalDecision == null) {
 
             log.warn(
-                    "AI agent returned null response. " +
+                    "Recovery decision orchestrator returned null. " +
                             "recoveryCaseId={}",
                     recoveryCase.getId()
             );
 
             escalateRecoveryCase(
                     recoveryCase,
-                    "AI agent returned null"
+                    "Final recovery decision was null"
             );
 
             return;
         }
 
-        if (agentResponse.getRecommendedStrategy() == null) {
+        if (finalDecision.getRecommendedStrategy() == null) {
 
             log.warn(
-                    "AI agent returned no strategy. " +
+                    "Final recovery decision contains no strategy. " +
                             "recoveryCaseId={}",
                     recoveryCase.getId()
             );
 
             escalateRecoveryCase(
                     recoveryCase,
-                    "AI agent returned no strategy"
+                    "Final recovery decision contains no strategy"
             );
 
             return;
         }
 
         log.info(
-                "AI agent recommendation received. " +
+                "Policy-approved recovery decision received. " +
                         "recoveryCaseId={}, strategy={}, " +
-                        "priority={}, reason={}, modelVersion={}, " +
-                        "fallbackUsed={}",
+                        "priority={}, fallbackUsed={}, reason={}",
                 recoveryCase.getId(),
-                agentResponse.getRecommendedStrategy(),
-                agentResponse.getPriority(),
-                agentResponse.getReason(),
-                agentResponse.getModelVersion(),
-                agentResponse.isFallbackUsed()
-        );
-
-        // =====================================================
-        // 24. BUILD FINAL DECISION
-        // =====================================================
-
-        RecoveryStrategy finalStrategy =
-                agentResponse.getRecommendedStrategy();
-
-        RecoveryPriority finalPriority =
-                agentResponse.getPriority();
-
-        if (finalPriority == null) {
-
-            finalPriority =
-                    RecoveryPriority.HIGH;
-        }
-
-        RecoveryDecision finalDecision =
-                RecoveryDecision.builder()
-                        .strategy(finalStrategy)
-                        .priority(finalPriority)
-                        .recoveryScore(
-                                recoveryScore
-                        )
-                        .reason(
-                                agentResponse.getReason()
-                        )
-                        .build();
-
-        log.info(
-                "Final AI-assisted recovery decision created. " +
-                        "recoveryCaseId={}, strategy={}, " +
-                        "priority={}, score={}",
-                recoveryCase.getId(),
-                finalDecision.getStrategy(),
+                finalDecision.getRecommendedStrategy(),
                 finalDecision.getPriority(),
-                finalDecision.getRecoveryScore()
+                finalDecision.isFallbackUsed(),
+                finalDecision.getReason()
         );
 
         // =====================================================
-        // 25. MARK CASE IN PROGRESS
+        // 24. MARK CASE IN PROGRESS
         // =====================================================
 
         recoveryCase.setStatus(
                 RecoveryCase.RecoveryStatus.IN_PROGRESS
         );
 
-        /*
-         * No explicit save is necessary here because recoveryCase
-         * is managed by the current transaction.
-         */
-
         // =====================================================
-        // 26. EXECUTE RECOVERY ACTION
+        // 25. FINAL DECISION → ACTION ORCHESTRATION
         // =====================================================
 
         try {
 
-            recoveryActionExecutor.execute(
+            recoveryActionOrchestrator.execute(
                     recoveryCase,
+                    agentRequest,
                     finalDecision
             );
 
             log.info(
-                    "Recovery action execution completed. " +
-                            "recoveryCaseId={}, strategy={}",
+                    "Recovery action pipeline completed. " +
+                            "recoveryCaseId={}, strategy={}, status={}",
                     recoveryCase.getId(),
-                    finalDecision.getStrategy()
+                    finalDecision.getRecommendedStrategy(),
+                    recoveryCase.getStatus()
             );
 
         } catch (Exception exception) {
 
             log.error(
-                    "Recovery action execution failed. " +
+                    "Recovery action orchestration failed. " +
                             "recoveryCaseId={}, strategy={}",
                     recoveryCase.getId(),
-                    finalDecision.getStrategy(),
+                    finalDecision.getRecommendedStrategy(),
                     exception
             );
 
@@ -898,14 +830,519 @@ public class PaymentRecoveryService {
                     RecoveryCase.RecoveryStatus.FAILED
             );
 
-            /*
-             * The entity is already managed, so Hibernate will
-             * persist the FAILED state when the transaction commits.
-             */
+            throw new RuntimeException(
+                    "Recovery action orchestration failed",
+                    exception
+            );
+        }
+    }
+
+
+    // =========================================================
+    // PROCESS PAYMENT SUCCESS / RECOVERY
+    // =========================================================
+
+    /**
+     * Processes a successful payment captured after a recovery
+     * action was initiated.
+     *
+     * Flow:
+     *
+     * payment.captured
+     *      ↓
+     * find payment/subscription
+     *      ↓
+     * mark PaymentAttempt SUCCESS
+     *      ↓
+     * find IN_PROGRESS RecoveryCase
+     *      ↓
+     * mark RecoveryCase RECOVERED
+     *      ↓
+     * amountRecovered = amountAtRisk
+     *      ↓
+     * subscription ACTIVE
+     *      ↓
+     * reevaluate subscription health
+     */
+    @Transactional
+    public void processPaymentSuccess(
+            PaymentFailedEvent event
+    ) {
+
+        // =====================================================
+        // 1. VALIDATE EVENT
+        // =====================================================
+
+        if (event == null) {
+
+            log.warn(
+                    "Ignoring null payment success event"
+            );
 
             return;
         }
+
+        if (event.getPayload() == null) {
+
+            log.warn(
+                    "Ignoring payment success event with null payload"
+            );
+
+            return;
+        }
+
+        if (event.getPayload().getPayment() == null
+                || event.getPayload()
+                .getPayment()
+                .getEntity() == null) {
+
+            log.warn(
+                    "Ignoring payment success event without payment entity"
+            );
+
+            return;
+        }
+
+        // =====================================================
+        // 2. EXTRACT PAYMENT
+        // =====================================================
+
+        PaymentFailedEvent.Entity payment =
+                event.getPayload()
+                        .getPayment()
+                        .getEntity();
+
+        String paymentId =
+                payment.getId();
+
+        if (paymentId == null
+                || paymentId.isBlank()) {
+
+            log.warn(
+                    "Payment success event does not contain payment ID"
+            );
+
+            return;
+        }
+
+        // =====================================================
+        // 3. EXTRACT SUBSCRIPTION ID
+        // =====================================================
+
+        String subscriptionId =
+                payment.getSubscriptionId();
+
+        if ((subscriptionId == null
+                || subscriptionId.isBlank())
+                && event.getPayload().getSubscription() != null
+                && event.getPayload()
+                .getSubscription()
+                .getEntity() != null) {
+
+            subscriptionId =
+                    event.getPayload()
+                            .getSubscription()
+                            .getEntity()
+                            .getId();
+        }
+
+        if (subscriptionId == null
+                || subscriptionId.isBlank()) {
+
+            log.warn(
+                    "Payment success event does not contain subscription ID. " +
+                            "paymentId={}",
+                    paymentId
+            );
+
+            return;
+        }
+
+        log.info(
+                "Processing successful payment recovery. " +
+                        "paymentId={}, subscriptionId={}",
+                paymentId,
+                subscriptionId
+        );
+
+        // =====================================================
+        // 4. FIND SUBSCRIPTION
+        // =====================================================
+
+        Subscription subscription =
+                subscriptionRepository
+                        .findByExternalSubscriptionId(
+                                subscriptionId
+                        )
+                        .orElse(null);
+
+        if (subscription == null) {
+
+            log.warn(
+                    "Subscription not found for successful payment. " +
+                            "externalSubscriptionId={}, paymentId={}",
+                    subscriptionId,
+                    paymentId
+            );
+
+            return;
+        }
+
+        log.info(
+                "Subscription found for successful payment. " +
+                        "internalId={}, externalSubscriptionId={}",
+                subscription.getId(),
+                subscriptionId
+        );
+
+        // =====================================================
+        // 5. CONVERT PAYMENT AMOUNT
+        // =====================================================
+
+        if (payment.getAmount() == null
+                || payment.getAmount() <= 0) {
+
+            log.warn(
+                    "Successful payment contains invalid amount. " +
+                            "paymentId={}, amount={}",
+                    paymentId,
+                    payment.getAmount()
+            );
+
+            return;
+        }
+
+        BigDecimal amount =
+                BigDecimal.valueOf(
+                                payment.getAmount()
+                        )
+                        .movePointLeft(2)
+                        .setScale(
+                                2,
+                                RoundingMode.HALF_UP
+                        );
+
+        log.info(
+                "Successful payment amount converted. " +
+                        "paymentId={}, amount={}",
+                paymentId,
+                amount
+        );
+
+        // =====================================================
+        // 6. CHECK IF THIS PAYMENT WAS ALREADY PROCESSED
+        // =====================================================
+
+        PaymentAttempt successfulAttempt =
+                paymentAttemptRepository
+                        .findByIdempotencyKey(paymentId)
+                        .orElse(null);
+
+        if (successfulAttempt != null) {
+
+            log.info(
+                    "Successful payment already processed. " +
+                            "paymentId={}, status={}",
+                    paymentId,
+                    successfulAttempt.getStatus()
+            );
+
+            /*
+             * If it is already SUCCESS, the event is a duplicate.
+             */
+            if (successfulAttempt.getStatus()
+                    == PaymentAttempt.PaymentStatus.SUCCESS) {
+
+                return;
+            }
+
+            /*
+             * If a previous failure attempt somehow used the same
+             * payment ID, update it to SUCCESS.
+             */
+            successfulAttempt.setStatus(
+                    PaymentAttempt.PaymentStatus.SUCCESS
+            );
+
+            paymentAttemptRepository.save(
+                    successfulAttempt
+            );
+
+        } else {
+
+            // =================================================
+            // 7. CREATE SUCCESSFUL PAYMENT ATTEMPT
+            // =================================================
+
+            successfulAttempt =
+                    PaymentAttempt.builder()
+                            .subscription(subscription)
+                            .externalPaymentId(paymentId)
+                            .idempotencyKey(paymentId)
+                            .externalOrderId(
+                                    payment.getOrderId()
+                            )
+                            .amount(amount)
+                            .status(
+                                    PaymentAttempt.PaymentStatus.SUCCESS
+                            )
+                            .build();
+
+            successfulAttempt =
+                    paymentAttemptRepository.save(
+                            successfulAttempt
+                    );
+
+            log.info(
+                    "Successful PaymentAttempt created. " +
+                            "id={}, paymentId={}",
+                    successfulAttempt.getId(),
+                    paymentId
+            );
+        }
+
+        // =====================================================
+        // 8. FIND ACTIVE RECOVERY CASE
+        // =====================================================
+
+        List<RecoveryCase> recoveryCases =
+                recoveryCaseRepository
+                        .findBySubscriptionAndStatus(
+                                subscription,
+                                RecoveryCase.RecoveryStatus.IN_PROGRESS
+                        );
+
+        if (recoveryCases == null
+                || recoveryCases.isEmpty()) {
+
+            log.info(
+                    "No IN_PROGRESS recovery case found for successful payment. " +
+                            "paymentId={}, subscriptionId={}",
+                    paymentId,
+                    subscriptionId
+            );
+
+            /*
+             * This can be a normal successful payment that was not
+             * caused by the recovery pipeline.
+             *
+             * Still restore the subscription.
+             */
+
+            subscription.setStatus(
+                    Subscription.SubscriptionStatus.ACTIVE
+            );
+
+            subscriptionRepository.save(
+                    subscription
+            );
+
+            subscriptionHealthEvaluator.evaluateHealth(
+                    subscription
+            );
+
+            log.info(
+                    "Subscription restored to ACTIVE after successful payment. " +
+                            "subscriptionId={}",
+                    subscription.getId()
+            );
+
+            return;
+        }
+
+        // =====================================================
+        // 9. FIND THE MATCHING RECOVERY CASE
+        // =====================================================
+
+        RecoveryCase recoveryCase = null;
+
+        for (RecoveryCase candidate : recoveryCases) {
+
+            if (candidate.getFailedPayment() == null) {
+                continue;
+            }
+
+            String failedPaymentId =
+                    candidate.getFailedPayment()
+                            .getExternalPaymentId();
+
+            if (failedPaymentId != null
+                    && !failedPaymentId.equals(paymentId)) {
+
+                /*
+                 * Do not accidentally close another recovery case.
+                 */
+                continue;
+            }
+
+            recoveryCase = candidate;
+            break;
+        }
+
+        /*
+         * If no case matches the captured payment ID, use the
+         * most recent IN_PROGRESS case only when there is exactly
+         * one case.
+         */
+        if (recoveryCase == null
+                && recoveryCases.size() == 1) {
+
+            recoveryCase =
+                    recoveryCases.get(0);
+        }
+
+        if (recoveryCase == null) {
+
+            log.warn(
+                    "No matching recovery case found for successful payment. " +
+                            "paymentId={}, subscriptionId={}",
+                    paymentId,
+                    subscriptionId
+            );
+
+            subscription.setStatus(
+                    Subscription.SubscriptionStatus.ACTIVE
+            );
+
+            subscriptionRepository.save(
+                    subscription
+            );
+
+            subscriptionHealthEvaluator.evaluateHealth(
+                    subscription
+            );
+
+            return;
+        }
+
+        log.info(
+                "Matching recovery case found. " +
+                        "recoveryCaseId={}, paymentId={}",
+                recoveryCase.getId(),
+                paymentId
+        );
+
+        // =====================================================
+        // 10. CALCULATE RECOVERED AMOUNT
+        // =====================================================
+
+        BigDecimal amountRecovered =
+                recoveryCase.getAmountAtRisk();
+
+        if (amountRecovered == null
+                || amountRecovered.compareTo(
+                BigDecimal.ZERO
+        ) <= 0) {
+
+            amountRecovered = amount;
+        }
+
+        /*
+         * Do not record more than the actual captured amount.
+         */
+        if (amountRecovered.compareTo(amount) > 0) {
+
+            amountRecovered = amount;
+        }
+
+        amountRecovered =
+                amountRecovered.setScale(
+                        2,
+                        RoundingMode.HALF_UP
+                );
+
+        // =====================================================
+        // 11. MARK RECOVERY CASE RECOVERED
+        // =====================================================
+
+        recoveryCase.setAmountRecovered(
+                amountRecovered
+        );
+
+        recoveryCase.setStatus(
+                RecoveryCase.RecoveryStatus.RECOVERED
+        );
+
+        recoveryCaseRepository.save(
+                recoveryCase
+        );
+
+        log.info(
+                "Recovery case marked RECOVERED. " +
+                        "recoveryCaseId={}, paymentId={}, " +
+                        "amountAtRisk={}, amountRecovered={}",
+                recoveryCase.getId(),
+                paymentId,
+                recoveryCase.getAmountAtRisk(),
+                amountRecovered
+        );
+
+        // =====================================================
+        // 12. RESTORE SUBSCRIPTION
+        // =====================================================
+
+        subscription.setStatus(
+                Subscription.SubscriptionStatus.ACTIVE
+        );
+
+        subscriptionRepository.save(
+                subscription
+        );
+
+        log.info(
+                "Subscription restored to ACTIVE after recovery. " +
+                        "subscriptionId={}, paymentId={}",
+                subscription.getId(),
+                paymentId
+        );
+
+        // =====================================================
+        // 13. RE-EVALUATE SUBSCRIPTION HEALTH
+        // =====================================================
+
+        SubscriptionHealth health =
+                subscriptionHealthEvaluator.evaluateHealth(
+                        subscription
+                );
+
+        if (health != null) {
+
+            log.info(
+                    "Subscription health re-evaluated after successful recovery. " +
+                            "subscriptionId={}, healthScore={}, " +
+                            "riskLevel={}, successfulPayments={}, " +
+                            "failedPayments={}, consecutiveFailures={}, " +
+                            "recentFailures={}, behaviorDeclining={}",
+                    subscription.getId(),
+                    health.getHealthScore(),
+                    health.getRiskLevel(),
+                    health.getSuccessfulPaymentCount(),
+                    health.getFailedPaymentCount(),
+                    health.getConsecutiveFailures(),
+                    health.getRecentFailureCount(),
+                    health.getPaymentBehaviorDeclining()
+            );
+
+        } else {
+
+            log.warn(
+                    "Subscription health re-evaluation returned null. " +
+                            "subscriptionId={}",
+                    subscription.getId()
+            );
+        }
+
+        log.info(
+                "Payment recovery completed successfully. " +
+                        "paymentId={}, subscriptionId={}, " +
+                        "recoveryCaseId={}, amountRecovered={}",
+                paymentId,
+                subscriptionId,
+                recoveryCase.getId(),
+                amountRecovered
+        );
     }
+
 
     // =========================================================
     // RECOVERY POTENTIAL
@@ -953,6 +1390,7 @@ public class PaymentRecoveryService {
         return RecoveryCase.RecoveryPotential.LOW;
     }
 
+
     // =========================================================
     // ESCALATE RECOVERY CASE
     // =========================================================
@@ -966,12 +1404,6 @@ public class PaymentRecoveryService {
                 RecoveryCase.RecoveryStatus.ESCALATED
         );
 
-        /*
-         * recoveryCase is managed by the active transaction.
-         *
-         * Explicit save is intentionally not required here.
-         */
-
         log.warn(
                 "Recovery case escalated. " +
                         "recoveryCaseId={}, reason={}",
@@ -980,3 +1412,4 @@ public class PaymentRecoveryService {
         );
     }
 }
+

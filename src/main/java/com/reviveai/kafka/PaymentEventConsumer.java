@@ -7,6 +7,7 @@ import com.reviveai.service.IdempotencyService;
 import com.reviveai.service.PaymentRecoveryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
@@ -16,7 +17,9 @@ import org.springframework.stereotype.Component;
 public class PaymentEventConsumer {
 
     private final ObjectMapper objectMapper;
+
     private final PaymentRecoveryService paymentRecoveryService;
+
     private final IdempotencyService idempotencyService;
 
     // ============================================================
@@ -27,32 +30,79 @@ public class PaymentEventConsumer {
             topics = KafkaConfig.RAW_PAYMENT_EVENTS_TOPIC,
             groupId = "reviveai-recovery-group"
     )
-    public void consumePaymentEvent(String message) {
+    public void consumePaymentEvent(
+            ConsumerRecord<String, String> record
+    ) {
 
         String eventId = null;
 
         try {
 
-            log.info(
-                    "Payment event received from Kafka. topic={}",
-                    KafkaConfig.RAW_PAYMENT_EVENTS_TOPIC
-            );
-
             // ====================================================
-            // 1. VALIDATE KAFKA MESSAGE
+            // 1. VALIDATE KAFKA RECORD
             // ====================================================
 
-            if (message == null || message.isBlank()) {
+            if (record == null) {
 
                 log.warn(
-                        "Ignoring empty Kafka payment event"
+                        "Ignoring null Kafka record"
                 );
 
                 return;
             }
 
             // ====================================================
-            // 2. DESERIALIZE KAFKA MESSAGE
+            // 2. EXTRACT KAFKA KEY AND VALUE
+            // ====================================================
+
+            eventId = record.key();
+
+            String message = record.value();
+
+            log.info(
+                    "Payment event received from Kafka. " +
+                            "topic={}, partition={}, offset={}, eventId={}",
+                    record.topic(),
+                    record.partition(),
+                    record.offset(),
+                    eventId
+            );
+
+            // ====================================================
+            // 3. VALIDATE EVENT ID
+            // ====================================================
+
+            if (eventId == null || eventId.isBlank()) {
+
+                log.warn(
+                        "Ignoring Kafka payment event because " +
+                                "Kafka event ID/key is missing. " +
+                                "topic={}, partition={}, offset={}",
+                        record.topic(),
+                        record.partition(),
+                        record.offset()
+                );
+
+                return;
+            }
+
+            // ====================================================
+            // 4. VALIDATE MESSAGE
+            // ====================================================
+
+            if (message == null || message.isBlank()) {
+
+                log.warn(
+                        "Ignoring empty Kafka payment event. " +
+                                "eventId={}",
+                        eventId
+                );
+
+                return;
+            }
+
+            // ====================================================
+            // 5. DESERIALIZE EVENT
             // ====================================================
 
             PaymentFailedEvent event;
@@ -68,16 +118,11 @@ public class PaymentEventConsumer {
             } catch (Exception exception) {
 
                 log.error(
-                        "Failed to deserialize Kafka payment event",
+                        "Failed to deserialize Kafka payment event. " +
+                                "eventId={}",
+                        eventId,
                         exception
                 );
-
-                /*
-                 * Invalid JSON cannot be processed successfully.
-                 *
-                 * Throwing the exception allows the Kafka
-                 * error-handling mechanism to deal with it.
-                 */
 
                 throw new IllegalArgumentException(
                         "Invalid payment event JSON",
@@ -86,49 +131,111 @@ public class PaymentEventConsumer {
             }
 
             // ====================================================
-            // 3. VALIDATE EVENT STRUCTURE
+            // 6. VALIDATE EVENT
             // ====================================================
 
             if (event == null) {
 
                 log.warn(
-                        "Ignoring null deserialized payment event"
+                        "Ignoring null payment event. " +
+                                "eventId={}",
+                        eventId
                 );
 
                 return;
             }
+
+            // ====================================================
+            // 7. VALIDATE EVENT TYPE
+            // ====================================================
+
+            String eventType =
+                    event.getEvent();
+
+            if (eventType == null
+                    || eventType.isBlank()) {
+
+                log.warn(
+                        "Invalid payment event: event type is missing. " +
+                                "eventId={}",
+                        eventId
+                );
+
+                return;
+            }
+
+            log.info(
+                    "Payment webhook event type resolved. " +
+                            "eventId={}, event={}",
+                    eventId,
+                    eventType
+            );
+
+            // ====================================================
+            // 8. ONLY PROCESS PAYMENT FAILURE EVENTS
+            // ====================================================
+
+            if (!"payment.failed".equalsIgnoreCase(eventType)) {
+
+                log.info(
+                        "Ignoring non-failure payment event. " +
+                                "eventId={}, event={}",
+                        eventId,
+                        eventType
+                );
+
+                return;
+            }
+
+            // ====================================================
+            // 9. VALIDATE PAYLOAD
+            // ====================================================
 
             if (event.getPayload() == null) {
 
                 log.warn(
-                        "Invalid payment event: payload is missing"
+                        "Invalid payment failure event: " +
+                                "payload is missing. eventId={}",
+                        eventId
                 );
 
                 return;
             }
+
+            // ====================================================
+            // 10. VALIDATE PAYMENT
+            // ====================================================
 
             if (event.getPayload().getPayment() == null) {
 
                 log.warn(
-                        "Invalid payment event: payment object is missing"
+                        "Invalid payment failure event: " +
+                                "payment object missing. eventId={}",
+                        eventId
                 );
 
                 return;
             }
+
+            // ====================================================
+            // 11. VALIDATE PAYMENT ENTITY
+            // ====================================================
 
             if (event.getPayload()
                     .getPayment()
                     .getEntity() == null) {
 
                 log.warn(
-                        "Invalid payment event: payment entity is missing"
+                        "Invalid payment failure event: " +
+                                "payment entity missing. eventId={}",
+                        eventId
                 );
 
                 return;
             }
 
             // ====================================================
-            // 4. EXTRACT PAYMENT
+            // 12. EXTRACT PAYMENT
             // ====================================================
 
             PaymentFailedEvent.Entity payment =
@@ -137,31 +244,26 @@ public class PaymentEventConsumer {
                             .getEntity();
 
             // ====================================================
-            // 5. VALIDATE PAYMENT ID
+            // 13. VALIDATE PAYMENT ID
             // ====================================================
 
             if (payment.getId() == null
                     || payment.getId().isBlank()) {
 
                 log.warn(
-                        "Invalid payment event: payment ID is missing"
+                        "Invalid payment failure event: " +
+                                "payment ID missing. eventId={}",
+                        eventId
                 );
 
                 return;
             }
 
-            /*
-             * The current PaymentFailedEvent model does not contain
-             * a dedicated Razorpay webhook event ID.
-             *
-             * Therefore payment ID is used as the downstream
-             * idempotency identifier.
-             */
-
-            eventId = payment.getId();
+            String paymentId =
+                    payment.getId();
 
             // ====================================================
-            // 6. REDIS IDEMPOTENCY CHECK
+            // 14. REDIS IDEMPOTENCY
             // ====================================================
 
             boolean firstProcessing =
@@ -172,26 +274,28 @@ public class PaymentEventConsumer {
             if (!firstProcessing) {
 
                 log.info(
-                        "Duplicate Kafka payment event ignored. " +
+                        "Duplicate payment event ignored. " +
                                 "eventId={}, paymentId={}",
                         eventId,
-                        payment.getId()
+                        paymentId
                 );
 
                 return;
             }
 
             // ====================================================
-            // 7. RESOLVE CUSTOMER ID
+            // 15. RESOLVE CUSTOMER ID
             // ====================================================
 
             String customerId =
                     payment.getCustomerId();
 
             /*
-             * Prefer payment.entity.customer_id.
+             * Preferred:
              *
-             * If it is not available, fall back to:
+             * payment.entity.customer_id
+             *
+             * Fallback:
              *
              * payload.customer.entity.id
              */
@@ -211,24 +315,26 @@ public class PaymentEventConsumer {
             }
 
             // ====================================================
-            // 8. LOG PAYMENT FAILURE
+            // 16. LOG PAYMENT FAILURE
             // ====================================================
 
             log.info(
                     "Payment failure received. " +
-                            "paymentId={}, customerId={}, " +
-                            "amount={}, currency={}, " +
+                            "eventId={}, paymentId={}, customerId={}, " +
+                            "amount={}, currency={}, status={}, " +
                             "errorCode={}, errorDescription={}",
-                    payment.getId(),
+                    eventId,
+                    paymentId,
                     customerId,
                     payment.getAmount(),
                     payment.getCurrency(),
+                    payment.getStatus(),
                     payment.getErrorCode(),
                     payment.getErrorDescription()
             );
 
             // ====================================================
-            // 9. PROCESS PAYMENT RECOVERY
+            // 17. PROCESS PAYMENT RECOVERY
             // ====================================================
 
             paymentRecoveryService.processPaymentFailure(
@@ -236,30 +342,24 @@ public class PaymentEventConsumer {
             );
 
             // ====================================================
-            // 10. SUCCESS
+            // 18. SUCCESS
             // ====================================================
 
             log.info(
-                    "Payment recovery processing completed successfully. " +
-                            "paymentId={}, eventId={}",
-                    payment.getId(),
-                    eventId
+                    "Payment failure recovery processing completed successfully. " +
+                            "eventId={}, paymentId={}",
+                    eventId,
+                    paymentId
             );
 
         } catch (Exception exception) {
 
             // ====================================================
-            // 11. REMOVE IDEMPOTENCY MARK ON FAILURE
+            // 19. REMOVE REDIS IDEMPOTENCY MARK
             // ====================================================
 
-            /*
-             * If processing failed after Redis marked this event
-             * as processed, remove the mark.
-             *
-             * This allows Kafka to retry the message.
-             */
-
-            if (eventId != null) {
+            if (eventId != null
+                    && !eventId.isBlank()) {
 
                 try {
 
@@ -290,7 +390,7 @@ public class PaymentEventConsumer {
             }
 
             // ====================================================
-            // 12. LOG FAILURE
+            // 20. LOG FAILURE
             // ====================================================
 
             log.error(
@@ -301,7 +401,7 @@ public class PaymentEventConsumer {
             );
 
             // ====================================================
-            // 13. PROPAGATE FAILURE TO KAFKA
+            // 21. PROPAGATE FAILURE TO KAFKA
             // ====================================================
 
             throw new RuntimeException(

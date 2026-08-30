@@ -3,6 +3,7 @@ package com.reviveai.recovery;
 import com.reviveai.entity.RecoveryAction;
 import com.reviveai.entity.RecoveryCase;
 import com.reviveai.repository.RecoveryActionRepository;
+import com.reviveai.service.AuditEventService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,12 +25,15 @@ public class RecoveryActionExecutor {
 
     private final RecoveryDecisionGuard recoveryDecisionGuard;
 
+    private final AuditEventService auditEventService;
+
     private final Map<RecoveryStrategy, RecoveryActionHandler> handlers;
 
     public RecoveryActionExecutor(
             RecoveryActionRepository recoveryActionRepository,
             List<RecoveryActionHandler> handlerList,
-            RecoveryDecisionGuard recoveryDecisionGuard
+            RecoveryDecisionGuard recoveryDecisionGuard,
+            AuditEventService auditEventService
     ) {
 
         this.recoveryActionRepository =
@@ -37,6 +41,9 @@ public class RecoveryActionExecutor {
 
         this.recoveryDecisionGuard =
                 recoveryDecisionGuard;
+
+        this.auditEventService =
+                auditEventService;
 
         this.handlers =
                 handlerList.stream()
@@ -87,16 +94,6 @@ public class RecoveryActionExecutor {
         // 3. SAFETY GUARD
         // =====================================================
 
-        /*
-         * IMPORTANT:
-         *
-         * The guard is intentionally called BEFORE checking
-         * whether the strategy is null.
-         *
-         * This ensures every recovery decision passes through
-         * the central safety boundary.
-         */
-
         RecoveryDecisionGuard.GuardResult guardResult;
 
         try {
@@ -120,6 +117,13 @@ public class RecoveryActionExecutor {
                     RecoveryCase.RecoveryStatus.ESCALATED
             );
 
+            audit(
+                    "RECOVERY_DECISION_GUARD_ERROR",
+                    recoveryCase,
+                    "SYSTEM",
+                    "Recovery decision guard threw an exception."
+            );
+
             return;
         }
 
@@ -133,6 +137,13 @@ public class RecoveryActionExecutor {
 
             recoveryCase.setStatus(
                     RecoveryCase.RecoveryStatus.ESCALATED
+            );
+
+            audit(
+                    "RECOVERY_DECISION_GUARD_ERROR",
+                    recoveryCase,
+                    "SYSTEM",
+                    "Recovery decision guard returned null."
             );
 
             return;
@@ -152,6 +163,14 @@ public class RecoveryActionExecutor {
                     RecoveryCase.RecoveryStatus.ESCALATED
             );
 
+            audit(
+                    "RECOVERY_DECISION_REJECTED",
+                    recoveryCase,
+                    "SYSTEM",
+                    "strategy=" + decision.getStrategy()
+                            + ", reason=" + guardResult.getReason()
+            );
+
             return;
         }
 
@@ -164,17 +183,17 @@ public class RecoveryActionExecutor {
 
         if (strategy == null) {
 
-            /*
-             * The guard has already validated the decision.
-             *
-             * A null strategy cannot be executed, so simply
-             * stop without creating a RecoveryAction.
-             */
-
             log.warn(
                     "Recovery decision does not contain a strategy. " +
                             "recoveryCaseId={}",
                     recoveryCase.getId()
+            );
+
+            audit(
+                    "RECOVERY_DECISION_INVALID",
+                    recoveryCase,
+                    "SYSTEM",
+                    "Recovery decision does not contain a strategy."
             );
 
             return;
@@ -191,6 +210,16 @@ public class RecoveryActionExecutor {
                 strategy,
                 decision.getPriority(),
                 decision.getRecoveryScore()
+        );
+
+        audit(
+                "RECOVERY_DECISION_ACCEPTED",
+                recoveryCase,
+                "SYSTEM",
+                "strategy=" + strategy
+                        + ", priority=" + decision.getPriority()
+                        + ", score=" + decision.getRecoveryScore()
+                        + ", reason=" + decision.getReason()
         );
 
         // =====================================================
@@ -228,6 +257,15 @@ public class RecoveryActionExecutor {
                         strategy
                 );
 
+                audit(
+                        "RECOVERY_ACTION_DUPLICATE_SKIPPED",
+                        recoveryCase,
+                        "SYSTEM",
+                        "actionId=" + action.getId()
+                                + ", strategy=" + strategy
+                                + ", status=EXECUTED"
+                );
+
                 return;
             }
 
@@ -247,6 +285,15 @@ public class RecoveryActionExecutor {
                         strategy
                 );
 
+                audit(
+                        "RECOVERY_ACTION_DUPLICATE_SKIPPED",
+                        recoveryCase,
+                        "SYSTEM",
+                        "actionId=" + action.getId()
+                                + ", strategy=" + strategy
+                                + ", status=PENDING"
+                );
+
                 return;
             }
 
@@ -264,6 +311,15 @@ public class RecoveryActionExecutor {
                         action.getId(),
                         recoveryCase.getId(),
                         strategy
+                );
+
+                audit(
+                        "RECOVERY_ACTION_RETRY_CREATED",
+                        recoveryCase,
+                        "SYSTEM",
+                        "previousActionId=" + action.getId()
+                                + ", strategy=" + strategy
+                                + ", previousStatus=FAILED"
                 );
             }
         }
@@ -286,6 +342,13 @@ public class RecoveryActionExecutor {
 
             recoveryCase.setStatus(
                     RecoveryCase.RecoveryStatus.ESCALATED
+            );
+
+            audit(
+                    "RECOVERY_ACTION_HANDLER_MISSING",
+                    recoveryCase,
+                    "SYSTEM",
+                    "No handler registered for strategy=" + strategy
             );
 
             return;
@@ -327,6 +390,16 @@ public class RecoveryActionExecutor {
                 decision.getRecoveryScore()
         );
 
+        audit(
+                "RECOVERY_ACTION_CREATED",
+                recoveryCase,
+                "SYSTEM",
+                "actionId=" + recoveryAction.getId()
+                        + ", strategy=" + strategy
+                        + ", priority=" + decision.getPriority()
+                        + ", score=" + decision.getRecoveryScore()
+        );
+
         // =====================================================
         // 9. EXECUTE HANDLER
         // =====================================================
@@ -341,6 +414,16 @@ public class RecoveryActionExecutor {
                     strategy,
                     recoveryCase.getId(),
                     handler.getClass().getSimpleName()
+            );
+
+            audit(
+                    "RECOVERY_ACTION_EXECUTION_STARTED",
+                    recoveryCase,
+                    "SYSTEM",
+                    "actionId=" + recoveryAction.getId()
+                            + ", strategy=" + strategy
+                            + ", handler="
+                            + handler.getClass().getSimpleName()
             );
 
             outcome =
@@ -359,12 +442,27 @@ public class RecoveryActionExecutor {
                     RecoveryAction.ActionStatus.FAILED
             );
 
+            recoveryAction.setExecutedAt(
+                    LocalDateTime.now()
+            );
+
             recoveryActionRepository.save(
                     recoveryAction
             );
 
             recoveryCase.setStatus(
                     RecoveryCase.RecoveryStatus.FAILED
+            );
+
+            audit(
+                    "RECOVERY_ACTION_FAILED",
+                    recoveryCase,
+                    "SYSTEM",
+                    "actionId=" + recoveryAction.getId()
+                            + ", strategy=" + strategy
+                            + ", reason=Handler exception"
+                            + ", exception="
+                            + exception.getClass().getSimpleName()
             );
 
             log.error(
@@ -376,7 +474,7 @@ public class RecoveryActionExecutor {
                     exception
             );
 
-            throw exception;
+            return;
         }
 
         // =====================================================
@@ -389,6 +487,10 @@ public class RecoveryActionExecutor {
                     RecoveryAction.ActionStatus.FAILED
             );
 
+            recoveryAction.setExecutedAt(
+                    LocalDateTime.now()
+            );
+
             recoveryActionRepository.save(
                     recoveryAction
             );
@@ -397,13 +499,24 @@ public class RecoveryActionExecutor {
                     RecoveryCase.RecoveryStatus.FAILED
             );
 
-            throw new IllegalStateException(
-                    "Recovery action handler returned null outcome. " +
-                            "recoveryCaseId=" +
-                            recoveryCase.getId() +
-                            ", strategy=" +
-                            strategy
+            audit(
+                    "RECOVERY_ACTION_FAILED",
+                    recoveryCase,
+                    "SYSTEM",
+                    "actionId=" + recoveryAction.getId()
+                            + ", strategy=" + strategy
+                            + ", reason=Handler returned null outcome"
             );
+
+            log.error(
+                    "Recovery action handler returned null outcome. " +
+                            "actionId={}, recoveryCaseId={}, strategy={}",
+                    recoveryAction.getId(),
+                    recoveryCase.getId(),
+                    strategy
+            );
+
+            return;
         }
 
         // =====================================================
@@ -465,6 +578,16 @@ public class RecoveryActionExecutor {
                     OffsetDateTime.now()
             );
 
+            audit(
+                    "RECOVERY_CASE_RECOVERED",
+                    recoveryCase,
+                    "SYSTEM",
+                    "actionId=" + recoveryAction.getId()
+                            + ", strategy=" + strategy
+                            + ", amountRecovered=" + amountRecovered
+                            + ", reason=" + outcome.getReason()
+            );
+
             log.info(
                     "Recovery case marked RECOVERED. " +
                             "actionId={}, recoveryCaseId={}, strategy={}, " +
@@ -519,6 +642,16 @@ public class RecoveryActionExecutor {
                     RecoveryCase.RecoveryStatus.IN_PROGRESS
             );
 
+            audit(
+                    "RECOVERY_ACTION_SUBMITTED",
+                    recoveryCase,
+                    "SYSTEM",
+                    "actionId=" + recoveryAction.getId()
+                            + ", strategy=" + strategy
+                            + ", reason=" + outcome.getReason()
+                            + ", awaiting=payment.captured webhook"
+            );
+
             log.info(
                     "Recovery action submitted successfully. " +
                             "Action marked EXECUTED while recovery case " +
@@ -544,12 +677,25 @@ public class RecoveryActionExecutor {
                     RecoveryAction.ActionStatus.FAILED
             );
 
+            recoveryAction.setExecutedAt(
+                    LocalDateTime.now()
+            );
+
             recoveryActionRepository.save(
                     recoveryAction
             );
 
             recoveryCase.setStatus(
                     RecoveryCase.RecoveryStatus.FAILED
+            );
+
+            audit(
+                    "RECOVERY_ACTION_FAILED",
+                    recoveryCase,
+                    "SYSTEM",
+                    "actionId=" + recoveryAction.getId()
+                            + ", strategy=" + strategy
+                            + ", reason=" + outcome.getReason()
             );
 
             log.warn(
@@ -573,6 +719,10 @@ public class RecoveryActionExecutor {
                 RecoveryAction.ActionStatus.FAILED
         );
 
+        recoveryAction.setExecutedAt(
+                LocalDateTime.now()
+        );
+
         recoveryActionRepository.save(
                 recoveryAction
         );
@@ -581,9 +731,63 @@ public class RecoveryActionExecutor {
                 RecoveryCase.RecoveryStatus.FAILED
         );
 
-        throw new IllegalStateException(
-                "Unsupported recovery outcome status: "
-                        + outcomeStatus
+        audit(
+                "RECOVERY_ACTION_FAILED",
+                recoveryCase,
+                "SYSTEM",
+                "actionId=" + recoveryAction.getId()
+                        + ", strategy=" + strategy
+                        + ", reason=Unsupported outcome status"
+                        + ", outcomeStatus=" + outcomeStatus
         );
+
+        log.error(
+                "Unsupported recovery outcome status. " +
+                        "actionId={}, recoveryCaseId={}, strategy={}, status={}",
+                recoveryAction.getId(),
+                recoveryCase.getId(),
+                strategy,
+                outcomeStatus
+        );
+    }
+
+    // =========================================================
+    // AUDIT HELPER
+    // =========================================================
+
+    private void audit(
+            String eventType,
+            RecoveryCase recoveryCase,
+            String actor,
+            String eventData
+    ) {
+
+        try {
+
+            auditEventService.record(
+                    eventType,
+                    "RECOVERY_CASE",
+                    recoveryCase.getId(),
+                    actor,
+                    eventData
+            );
+
+        } catch (Exception exception) {
+
+            /*
+             * Defensive protection.
+             *
+             * Audit logging must NEVER break the payment
+             * recovery pipeline.
+             */
+
+            log.error(
+                    "Unexpected audit logging failure. " +
+                            "eventType={}, recoveryCaseId={}",
+                    eventType,
+                    recoveryCase.getId(),
+                    exception
+            );
+        }
     }
 }

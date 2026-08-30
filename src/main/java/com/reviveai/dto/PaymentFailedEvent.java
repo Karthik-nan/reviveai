@@ -6,16 +6,51 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PaymentFailedEvent {
 
+    // ========================================================
+    // WEBHOOK EVENT
+    // ========================================================
+
+    /*
+     * Razorpay sends the event ID in the HTTP header:
+     *
+     * X-Razorpay-Event-Id
+     *
+     * It is NOT normally part of the webhook JSON body.
+     *
+     * Therefore this field is populated by our controller /
+     * Kafka pipeline rather than Jackson deserialization.
+     */
+    private String eventId;
+
+    /*
+     * Example:
+     *
+     * payment.failed
+     */
     private String event;
 
+    /*
+     * Razorpay webhook creation timestamp.
+     */
     @JsonProperty("created_at")
     private Long createdAt;
 
+    /*
+     * Main webhook payload.
+     */
     private Payload payload;
 
     // ========================================================
     // GETTERS / SETTERS
     // ========================================================
+
+    public String getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(String eventId) {
+        this.eventId = eventId;
+    }
 
     public String getEvent() {
         return event;
@@ -54,6 +89,10 @@ public class PaymentFailedEvent {
 
         private Customer customer;
 
+        // ====================================================
+        // GETTERS / SETTERS
+        // ====================================================
+
         public Payment getPayment() {
             return payment;
         }
@@ -88,6 +127,10 @@ public class PaymentFailedEvent {
 
         private Entity entity;
 
+        // ====================================================
+        // GETTERS / SETTERS
+        // ====================================================
+
         public Entity getEntity() {
             return entity;
         }
@@ -105,6 +148,10 @@ public class PaymentFailedEvent {
     public static class Subscription {
 
         private SubscriptionEntity entity;
+
+        // ====================================================
+        // GETTERS / SETTERS
+        // ====================================================
 
         public SubscriptionEntity getEntity() {
             return entity;
@@ -124,6 +171,10 @@ public class PaymentFailedEvent {
 
         private CustomerEntity entity;
 
+        // ====================================================
+        // GETTERS / SETTERS
+        // ====================================================
+
         public CustomerEntity getEntity() {
             return entity;
         }
@@ -142,6 +193,10 @@ public class PaymentFailedEvent {
 
         private String id;
 
+        // ====================================================
+        // GETTERS / SETTERS
+        // ====================================================
+
         public String getId() {
             return id;
         }
@@ -158,28 +213,68 @@ public class PaymentFailedEvent {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Entity {
 
+        /*
+         * Razorpay payment ID.
+         *
+         * Example:
+         * pay_xxxxxxxxxxxxxx
+         */
         private String id;
 
+        /*
+         * Razorpay amount is represented in the smallest
+         * currency unit.
+         *
+         * Example:
+         * ₹499.00 -> 49900
+         */
         private Long amount;
 
+        /*
+         * Example:
+         * INR
+         */
         private String currency;
 
+        /*
+         * Example:
+         * failed
+         */
         private String status;
 
+        /*
+         * Razorpay order ID.
+         */
         @JsonProperty("order_id")
         private String orderId;
 
+        /*
+         * Razorpay subscription ID.
+         */
         @JsonProperty("subscription_id")
         private String subscriptionId;
 
+        /*
+         * Razorpay customer ID.
+         */
         @JsonProperty("customer_id")
         private String customerId;
 
+        /*
+         * Gateway failure code.
+         */
         @JsonProperty("error_code")
         private String errorCode;
 
+        /*
+         * Gateway failure description.
+         */
         @JsonProperty("error_description")
         private String errorDescription;
+
+        // ====================================================
+        // GETTERS / SETTERS
+        // ====================================================
 
         public String getId() {
             return id;
@@ -261,7 +356,19 @@ public class PaymentFailedEvent {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class SubscriptionEntity {
 
+        /*
+         * Razorpay subscription ID.
+         */
         private String id;
+
+        /*
+         * Subscription status.
+         */
+        private String status;
+
+        // ====================================================
+        // GETTERS / SETTERS
+        // ====================================================
 
         public String getId() {
             return id;
@@ -269,6 +376,14 @@ public class PaymentFailedEvent {
 
         public void setId(String id) {
             this.id = id;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
         }
     }
 }
