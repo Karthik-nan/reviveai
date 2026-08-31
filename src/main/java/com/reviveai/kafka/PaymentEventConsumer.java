@@ -172,13 +172,19 @@ public class PaymentEventConsumer {
             );
 
             // ====================================================
-            // 8. ONLY PROCESS PAYMENT FAILURE EVENTS
+            // 8. ACCEPT SUPPORTED EVENTS
             // ====================================================
 
-            if (!"payment.failed".equalsIgnoreCase(eventType)) {
+            boolean paymentFailed =
+                    "payment.failed".equalsIgnoreCase(eventType);
+
+            boolean paymentCaptured =
+                    "payment.captured".equalsIgnoreCase(eventType);
+
+            if (!paymentFailed && !paymentCaptured) {
 
                 log.info(
-                        "Ignoring non-failure payment event. " +
+                        "Ignoring unsupported payment event. " +
                                 "eventId={}, event={}",
                         eventId,
                         eventType
@@ -194,9 +200,10 @@ public class PaymentEventConsumer {
             if (event.getPayload() == null) {
 
                 log.warn(
-                        "Invalid payment failure event: " +
-                                "payload is missing. eventId={}",
-                        eventId
+                        "Invalid payment event: payload is missing. " +
+                                "eventId={}, event={}",
+                        eventId,
+                        eventType
                 );
 
                 return;
@@ -209,9 +216,10 @@ public class PaymentEventConsumer {
             if (event.getPayload().getPayment() == null) {
 
                 log.warn(
-                        "Invalid payment failure event: " +
-                                "payment object missing. eventId={}",
-                        eventId
+                        "Invalid payment event: payment object missing. " +
+                                "eventId={}, event={}",
+                        eventId,
+                        eventType
                 );
 
                 return;
@@ -226,9 +234,10 @@ public class PaymentEventConsumer {
                     .getEntity() == null) {
 
                 log.warn(
-                        "Invalid payment failure event: " +
-                                "payment entity missing. eventId={}",
-                        eventId
+                        "Invalid payment event: payment entity missing. " +
+                                "eventId={}, event={}",
+                        eventId,
+                        eventType
                 );
 
                 return;
@@ -251,9 +260,10 @@ public class PaymentEventConsumer {
                     || payment.getId().isBlank()) {
 
                 log.warn(
-                        "Invalid payment failure event: " +
-                                "payment ID missing. eventId={}",
-                        eventId
+                        "Invalid payment event: payment ID missing. " +
+                                "eventId={}, event={}",
+                        eventId,
+                        eventType
                 );
 
                 return;
@@ -275,9 +285,10 @@ public class PaymentEventConsumer {
 
                 log.info(
                         "Duplicate payment event ignored. " +
-                                "eventId={}, paymentId={}",
+                                "eventId={}, paymentId={}, event={}",
                         eventId,
-                        paymentId
+                        paymentId,
+                        eventType
                 );
 
                 return;
@@ -315,15 +326,16 @@ public class PaymentEventConsumer {
             }
 
             // ====================================================
-            // 16. LOG PAYMENT FAILURE
+            // 16. LOG EVENT
             // ====================================================
 
             log.info(
-                    "Payment failure received. " +
-                            "eventId={}, paymentId={}, customerId={}, " +
-                            "amount={}, currency={}, status={}, " +
+                    "Supported payment event received. " +
+                            "eventId={}, event={}, paymentId={}, " +
+                            "customerId={}, amount={}, currency={}, status={}, " +
                             "errorCode={}, errorDescription={}",
                     eventId,
+                    eventType,
                     paymentId,
                     customerId,
                     payment.getAmount(),
@@ -334,21 +346,45 @@ public class PaymentEventConsumer {
             );
 
             // ====================================================
-            // 17. PROCESS PAYMENT RECOVERY
+            // 17. ROUTE EVENT
             // ====================================================
 
-            paymentRecoveryService.processPaymentFailure(
-                    event
-            );
+            if (paymentFailed) {
+
+                log.info(
+                        "Routing payment.failed event to recovery pipeline. " +
+                                "eventId={}, paymentId={}",
+                        eventId,
+                        paymentId
+                );
+
+                paymentRecoveryService.processPaymentFailure(
+                        event
+                );
+
+            } else {
+
+                log.info(
+                        "Routing payment.captured event to recovery pipeline. " +
+                                "eventId={}, paymentId={}",
+                        eventId,
+                        paymentId
+                );
+
+                paymentRecoveryService.processPaymentSuccess(
+                        event
+                );
+            }
 
             // ====================================================
             // 18. SUCCESS
             // ====================================================
 
             log.info(
-                    "Payment failure recovery processing completed successfully. " +
-                            "eventId={}, paymentId={}",
+                    "Payment event processing completed successfully. " +
+                            "eventId={}, event={}, paymentId={}",
                     eventId,
+                    eventType,
                     paymentId
             );
 
@@ -411,4 +447,3 @@ public class PaymentEventConsumer {
         }
     }
 }
-

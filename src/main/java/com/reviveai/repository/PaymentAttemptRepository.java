@@ -33,6 +33,11 @@ public interface PaymentAttemptRepository
             String externalPaymentId
     );
 
+    Optional<PaymentAttempt> findFirstBySubscriptionIdAndExternalOrderIdAndStatus(
+            UUID subscriptionId,
+            String externalOrderId,
+            PaymentAttempt.PaymentStatus status
+    );
     // ============================================================
     // PAYMENT COUNTS
     // ============================================================

@@ -21,6 +21,14 @@ public interface RecoveryActionRepository
             RecoveryAction.ActionStatus status
     );
 
+    // =========================================================
+    // COUNT BY STRATEGY
+    // =========================================================
+
+    long countByStrategy(
+            RecoveryStrategy strategy
+    );
+
     Optional<RecoveryAction> findFirstByRecoveryCaseIdAndStrategyOrderByCreatedAtDesc(
             UUID recoveryCaseId,
             RecoveryStrategy strategy

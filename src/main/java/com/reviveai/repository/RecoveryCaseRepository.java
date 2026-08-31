@@ -61,4 +61,10 @@ public interface RecoveryCaseRepository
             UUID subscriptionId,
             RecoveryCase.RecoveryStatus status
     );
+
+    Optional<RecoveryCase> findFirstBySubscriptionIdAndStatusOrderByCreatedAtDesc(
+            UUID subscriptionId,
+            RecoveryCase.RecoveryStatus status
+    );
+
 }

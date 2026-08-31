@@ -110,6 +110,13 @@ class PolicyDecisionServiceImplTest {
                         .recoveryCaseId(UUID.randomUUID())
                         .paymentAmount(new BigDecimal("5000"))
                         .retryCount(1)
+                        .recoveryScore(new BigDecimal("0.80"))
+                        .ruleBasedStrategy(
+                                RecoveryStrategy.RETRY_PAYMENT
+                        )
+                        .ruleBasedPriority(
+                                RecoveryPriority.HIGH
+                        )
                         .build();
 
         RecoveryAgentResponse agentResponse =

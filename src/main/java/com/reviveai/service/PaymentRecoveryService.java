@@ -428,10 +428,29 @@ public class PaymentRecoveryService {
                         )
                         .build();
 
-        recoveryCase =
-                recoveryCaseRepository.save(
-                        recoveryCase
-                );
+        try {
+
+            recoveryCase =
+                    recoveryCaseRepository.save(
+                            recoveryCase
+                    );
+
+            // Link the payment attempt back to the recovery case
+            paymentAttempt.setRecoveryCase(recoveryCase);
+
+            paymentAttemptRepository.save(paymentAttempt);
+
+        } catch (Exception exception) {
+
+            log.error(
+                    "Failed to create RecoveryCase. " +
+                            "paymentId={}",
+                    paymentId,
+                    exception
+            );
+
+            throw exception;
+        }
 
         log.info(
                 "RecoveryCase created. " +
@@ -601,6 +620,10 @@ public class PaymentRecoveryService {
 
         recoveryCase.setRecoveryScore(
                 recoveryScore
+        );
+
+        recoveryCaseRepository.save(
+                recoveryCase
         );
 
         log.info(
@@ -796,6 +819,10 @@ public class PaymentRecoveryService {
                 RecoveryCase.RecoveryStatus.IN_PROGRESS
         );
 
+        recoveryCaseRepository.save(
+                recoveryCase
+        );
+
         // =====================================================
         // 25. FINAL DECISION → ACTION ORCHESTRATION
         // =====================================================
@@ -830,6 +857,10 @@ public class PaymentRecoveryService {
                     RecoveryCase.RecoveryStatus.FAILED
             );
 
+            recoveryCaseRepository.save(
+                    recoveryCase
+            );
+
             throw new RuntimeException(
                     "Recovery action orchestration failed",
                     exception
@@ -854,7 +885,7 @@ public class PaymentRecoveryService {
      *      ↓
      * mark PaymentAttempt SUCCESS
      *      ↓
-     * find IN_PROGRESS RecoveryCase
+     * find matching IN_PROGRESS RecoveryCase
      *      ↓
      * mark RecoveryCase RECOVERED
      *      ↓
@@ -1102,29 +1133,32 @@ public class PaymentRecoveryService {
         }
 
         // =====================================================
-        // 8. FIND ACTIVE RECOVERY CASE
+        // 8. FIND MATCHING RECOVERY CASE
         // =====================================================
 
-        List<RecoveryCase> recoveryCases =
-                recoveryCaseRepository
-                        .findBySubscriptionAndStatus(
-                                subscription,
-                                RecoveryCase.RecoveryStatus.IN_PROGRESS
-                        );
+        RecoveryCase recoveryCase =
+                findMatchingRecoveryCase(
+                        subscription,
+                        paymentId,
+                        payment.getOrderId()
+                );
 
-        if (recoveryCases == null
-                || recoveryCases.isEmpty()) {
+        // =====================================================
+        // 9. NO MATCHING RECOVERY CASE
+        // =====================================================
+
+        if (recoveryCase == null) {
 
             log.info(
-                    "No IN_PROGRESS recovery case found for successful payment. " +
+                    "No matching IN_PROGRESS recovery case found. " +
                             "paymentId={}, subscriptionId={}",
                     paymentId,
                     subscriptionId
             );
 
             /*
-             * This can be a normal successful payment that was not
-             * caused by the recovery pipeline.
+             * This can be a normal successful payment that was
+             * not caused by the recovery pipeline.
              *
              * Still restore the subscription.
              */
@@ -1137,9 +1171,21 @@ public class PaymentRecoveryService {
                     subscription
             );
 
-            subscriptionHealthEvaluator.evaluateHealth(
-                    subscription
-            );
+            SubscriptionHealth health =
+                    subscriptionHealthEvaluator.evaluateHealth(
+                            subscription
+                    );
+
+            if (health != null) {
+
+                log.info(
+                        "Subscription health evaluated after normal successful payment. " +
+                                "subscriptionId={}, healthScore={}, riskLevel={}",
+                        subscription.getId(),
+                        health.getHealthScore(),
+                        health.getRiskLevel()
+                );
+            }
 
             log.info(
                     "Subscription restored to ACTIVE after successful payment. " +
@@ -1150,75 +1196,13 @@ public class PaymentRecoveryService {
             return;
         }
 
-        // =====================================================
-        // 9. FIND THE MATCHING RECOVERY CASE
-        // =====================================================
-
-        RecoveryCase recoveryCase = null;
-
-        for (RecoveryCase candidate : recoveryCases) {
-
-            if (candidate.getFailedPayment() == null) {
-                continue;
-            }
-
-            String failedPaymentId =
-                    candidate.getFailedPayment()
-                            .getExternalPaymentId();
-
-            if (failedPaymentId != null
-                    && !failedPaymentId.equals(paymentId)) {
-
-                /*
-                 * Do not accidentally close another recovery case.
-                 */
-                continue;
-            }
-
-            recoveryCase = candidate;
-            break;
-        }
-
-        /*
-         * If no case matches the captured payment ID, use the
-         * most recent IN_PROGRESS case only when there is exactly
-         * one case.
-         */
-        if (recoveryCase == null
-                && recoveryCases.size() == 1) {
-
-            recoveryCase =
-                    recoveryCases.get(0);
-        }
-
-        if (recoveryCase == null) {
-
-            log.warn(
-                    "No matching recovery case found for successful payment. " +
-                            "paymentId={}, subscriptionId={}",
-                    paymentId,
-                    subscriptionId
-            );
-
-            subscription.setStatus(
-                    Subscription.SubscriptionStatus.ACTIVE
-            );
-
-            subscriptionRepository.save(
-                    subscription
-            );
-
-            subscriptionHealthEvaluator.evaluateHealth(
-                    subscription
-            );
-
-            return;
-        }
-
         log.info(
                 "Matching recovery case found. " +
-                        "recoveryCaseId={}, paymentId={}",
+                        "recoveryCaseId={}, failedPaymentId={}, " +
+                        "successfulPaymentId={}",
                 recoveryCase.getId(),
+                recoveryCase.getFailedPayment()
+                        .getExternalPaymentId(),
                 paymentId
         );
 
@@ -1261,6 +1245,10 @@ public class PaymentRecoveryService {
 
         recoveryCase.setStatus(
                 RecoveryCase.RecoveryStatus.RECOVERED
+        );
+
+        recoveryCase.setResolvedAt(
+                java.time.OffsetDateTime.now()
         );
 
         recoveryCaseRepository.save(
@@ -1345,6 +1333,140 @@ public class PaymentRecoveryService {
 
 
     // =========================================================
+    // FIND MATCHING RECOVERY CASE
+    // =========================================================
+
+    /**
+     * Finds the recovery case that belongs to the failed payment
+     * associated with the successful recovery payment.
+     *
+     * Important:
+     *
+     * We intentionally do NOT blindly select the only IN_PROGRESS
+     * recovery case for a subscription.
+     *
+     * The failed payment relationship must match the payment that
+     * initiated the recovery flow.
+     */
+    private RecoveryCase findMatchingRecoveryCase(
+            Subscription subscription,
+            String successfulPaymentId,
+            String successfulOrderId
+    ) {
+
+        if (subscription == null) {
+
+            log.warn(
+                    "Cannot match recovery case because subscription is null. " +
+                            "successfulPaymentId={}",
+                    successfulPaymentId
+            );
+
+            return null;
+        }
+
+        if (successfulOrderId == null
+                || successfulOrderId.isBlank()) {
+
+            log.warn(
+                    "Successful payment does not contain order ID. " +
+                            "Cannot safely correlate recovery payment. " +
+                            "successfulPaymentId={}",
+                    successfulPaymentId
+            );
+
+            return null;
+        }
+
+        /*
+         * Find the original failed payment using:
+         *
+         * subscription + order ID + FAILED status
+         */
+        PaymentAttempt failedPayment =
+                paymentAttemptRepository
+                        .findFirstBySubscriptionIdAndExternalOrderIdAndStatus(
+                                subscription.getId(),
+                                successfulOrderId,
+                                PaymentAttempt.PaymentStatus.FAILED
+                        )
+                        .orElse(null);
+
+        if (failedPayment == null) {
+
+            log.warn(
+                    "No failed payment found for recovery order. " +
+                            "subscriptionId={}, orderId={}, successfulPaymentId={}",
+                    subscription.getId(),
+                    successfulOrderId,
+                    successfulPaymentId
+            );
+
+            return null;
+        }
+
+        log.info(
+                "Failed payment identified for successful recovery payment. " +
+                        "failedPaymentId={}, orderId={}, successfulPaymentId={}",
+                failedPayment.getExternalPaymentId(),
+                successfulOrderId,
+                successfulPaymentId
+        );
+
+        /*
+         * Find the recovery case belonging to that failed payment.
+         */
+        RecoveryCase recoveryCase =
+                recoveryCaseRepository
+                        .findByFailedPaymentId(
+                                failedPayment.getId()
+                        )
+                        .orElse(null);
+
+        if (recoveryCase == null) {
+
+            log.warn(
+                    "No recovery case found for failed payment. " +
+                            "failedPaymentId={}, successfulPaymentId={}",
+                    failedPayment.getId(),
+                    successfulPaymentId
+            );
+
+            return null;
+        }
+
+        /*
+         * Only IN_PROGRESS cases can be completed.
+         */
+        if (recoveryCase.getStatus()
+                != RecoveryCase.RecoveryStatus.IN_PROGRESS) {
+
+            log.warn(
+                    "Recovery case is not IN_PROGRESS. " +
+                            "recoveryCaseId={}, status={}, " +
+                            "successfulPaymentId={}",
+                    recoveryCase.getId(),
+                    recoveryCase.getStatus(),
+                    successfulPaymentId
+            );
+
+            return null;
+        }
+
+        log.info(
+                "Recovery case safely matched using order ID. " +
+                        "recoveryCaseId={}, failedPaymentId={}, " +
+                        "successfulPaymentId={}, orderId={}",
+                recoveryCase.getId(),
+                failedPayment.getExternalPaymentId(),
+                successfulPaymentId,
+                successfulOrderId
+        );
+
+        return recoveryCase;
+    }
+
+    // =========================================================
     // RECOVERY POTENTIAL
     // =========================================================
 
@@ -1400,8 +1522,27 @@ public class PaymentRecoveryService {
             String reason
     ) {
 
+        if (recoveryCase == null) {
+
+            log.warn(
+                    "Unable to escalate null recovery case. " +
+                            "reason={}",
+                    reason
+            );
+
+            return;
+        }
+
         recoveryCase.setStatus(
                 RecoveryCase.RecoveryStatus.ESCALATED
+        );
+
+        recoveryCase.setResolvedAt(
+                java.time.OffsetDateTime.now()
+        );
+
+        recoveryCaseRepository.save(
+                recoveryCase
         );
 
         log.warn(
@@ -1412,4 +1553,3 @@ public class PaymentRecoveryService {
         );
     }
 }
-

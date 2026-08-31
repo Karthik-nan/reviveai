@@ -34,3 +34,19 @@ build/
 
 # Local application configuration
 src/main/resources/application.properties
+
+# Local webhook test payloads
+payload.json
+payload_success_*.json
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
