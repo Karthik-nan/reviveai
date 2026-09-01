@@ -58,6 +58,20 @@ public class SecurityConfig {
                                 "/api/recovery-cases/**"
                         ).permitAll()
 
+                        // Subscriptions
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/subscriptions",
+                                "/api/subscriptions/**"
+                        ).permitAll()
+
+                        // Customers
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/customers",
+                                "/api/customers/**"
+                        ).permitAll()
+
                         // Health check
                         .requestMatchers(
                                 "/actuator/health"

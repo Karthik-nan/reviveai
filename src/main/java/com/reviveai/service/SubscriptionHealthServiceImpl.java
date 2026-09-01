@@ -22,6 +22,7 @@ public class SubscriptionHealthServiceImpl implements SubscriptionHealthService 
     private final SubscriptionRepository subscriptionRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final RecoveryCaseRepository recoveryCaseRepository;
+    private final SubscriptionHealthEvaluator subscriptionHealthEvaluator;
 
     @Override
     @Transactional
@@ -142,6 +143,10 @@ public class SubscriptionHealthServiceImpl implements SubscriptionHealthService 
                                         paymentData.getErrorDescription()
                                 )
                                 .build()
+                );
+        SubscriptionHealth health =
+                subscriptionHealthEvaluator.evaluateHealth(
+                        subscription
                 );
 
         // ============================================================

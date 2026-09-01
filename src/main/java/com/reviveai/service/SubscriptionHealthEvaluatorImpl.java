@@ -41,20 +41,15 @@ public class SubscriptionHealthEvaluatorImpl
             );
         }
 
-        /*
-         * ============================================================
-         * 1. SUBSCRIPTION ID
-         * ============================================================
-         */
+        // ============================================================
+        // 1. SUBSCRIPTION ID
+        // ============================================================
 
-        var subscriptionId =
-                subscription.getId();
+        var subscriptionId = subscription.getId();
 
-        /*
-         * ============================================================
-         * 2. TOTAL SUCCESSFUL PAYMENTS
-         * ============================================================
-         */
+        // ============================================================
+        // 2. TOTAL SUCCESSFUL PAYMENTS
+        // ============================================================
 
         long successfulPayments =
                 paymentAttemptRepository
@@ -63,11 +58,9 @@ public class SubscriptionHealthEvaluatorImpl
                                 PaymentAttempt.PaymentStatus.SUCCESS
                         );
 
-        /*
-         * ============================================================
-         * 3. TOTAL FAILED PAYMENTS
-         * ============================================================
-         */
+        // ============================================================
+        // 3. TOTAL FAILED PAYMENTS
+        // ============================================================
 
         long failedPayments =
                 paymentAttemptRepository
@@ -76,13 +69,9 @@ public class SubscriptionHealthEvaluatorImpl
                                 PaymentAttempt.PaymentStatus.FAILED
                         );
 
-        /*
-         * ============================================================
-         * 4. PAYMENT FAILURE RATE
-         * ============================================================
-         *
-         * failed / (successful + failed)
-         */
+        // ============================================================
+        // 4. PAYMENT FAILURE RATE
+        // ============================================================
 
         long totalPayments =
                 successfulPayments + failedPayments;
@@ -93,13 +82,35 @@ public class SubscriptionHealthEvaluatorImpl
                         totalPayments
                 );
 
-        /*
-         * ============================================================
-         * 5. RECENT FAILURE COUNT
-         * ============================================================
-         *
-         * Look at failures during the last 30 days.
-         */
+        // ============================================================
+        // 5. GET ALL PAYMENT ATTEMPTS
+        // ============================================================
+
+        List<PaymentAttempt> attempts =
+                paymentAttemptRepository
+                        .findBySubscriptionIdOrderByAttemptedAtDesc(
+                                subscriptionId
+                        );
+
+        // ============================================================
+        // 6. LAST FAILURE / LAST SUCCESS
+        // ============================================================
+
+        OffsetDateTime lastFailureAt =
+                findLastAttemptTime(
+                        attempts,
+                        PaymentAttempt.PaymentStatus.FAILED
+                );
+
+        OffsetDateTime lastSuccessAt =
+                findLastAttemptTime(
+                        attempts,
+                        PaymentAttempt.PaymentStatus.SUCCESS
+                );
+
+        // ============================================================
+        // 7. RECENT FAILURE COUNT
+        // ============================================================
 
         OffsetDateTime recentFailureCutoff =
                 OffsetDateTime.now()
@@ -115,22 +126,18 @@ public class SubscriptionHealthEvaluatorImpl
                                 recentFailureCutoff
                         );
 
-        /*
-         * ============================================================
-         * 6. CONSECUTIVE FAILURES
-         * ============================================================
-         */
+        // ============================================================
+        // 8. CONSECUTIVE FAILURES
+        // ============================================================
 
         int consecutiveFailures =
                 calculateConsecutiveFailures(
-                        subscriptionId
+                        attempts
                 );
 
-        /*
-         * ============================================================
-         * 7. PAYMENT BEHAVIOR DECLINE
-         * ============================================================
-         */
+        // ============================================================
+        // 9. PAYMENT BEHAVIOR DECLINE
+        // ============================================================
 
         boolean paymentBehaviorDeclining =
                 calculatePaymentBehaviorDeclining(
@@ -139,14 +146,9 @@ public class SubscriptionHealthEvaluatorImpl
                         failureRate
                 );
 
-        /*
-         * ============================================================
-         * 8. HEALTH SCORE
-         * ============================================================
-         *
-         * 1.00 = very healthy
-         * 0.00 = very unhealthy
-         */
+        // ============================================================
+        // 10. HEALTH SCORE
+        // ============================================================
 
         BigDecimal healthScore =
                 calculateHealthScore(
@@ -157,22 +159,18 @@ public class SubscriptionHealthEvaluatorImpl
                         recentFailures
                 );
 
-        /*
-         * ============================================================
-         * 9. RISK LEVEL
-         * ============================================================
-         */
+        // ============================================================
+        // 11. RISK LEVEL
+        // ============================================================
 
         SubscriptionHealth.RiskLevel riskLevel =
                 determineRiskLevel(
                         healthScore
                 );
 
-        /*
-         * ============================================================
-         * 10. FIND EXISTING HEALTH RECORD
-         * ============================================================
-         */
+        // ============================================================
+        // 12. FIND EXISTING HEALTH RECORD
+        // ============================================================
 
         SubscriptionHealth health =
                 subscriptionHealthRepository
@@ -183,11 +181,9 @@ public class SubscriptionHealthEvaluatorImpl
                                         .build()
                         );
 
-        /*
-         * ============================================================
-         * 11. UPDATE HEALTH RECORD
-         * ============================================================
-         */
+        // ============================================================
+        // 13. UPDATE HEALTH RECORD
+        // ============================================================
 
         health.setSubscription(subscription);
 
@@ -215,6 +211,18 @@ public class SubscriptionHealthEvaluatorImpl
                 consecutiveFailures
         );
 
+        health.setLastFailureAt(
+                lastFailureAt != null
+                        ? lastFailureAt.toLocalDateTime()
+                        : null
+        );
+
+        health.setLastSuccessAt(
+                lastSuccessAt != null
+                        ? lastSuccessAt.toLocalDateTime()
+                        : null
+        );
+
         health.setRecentFailureCount(
                 toInteger(recentFailures)
         );
@@ -227,16 +235,18 @@ public class SubscriptionHealthEvaluatorImpl
                 java.time.LocalDateTime.now()
         );
 
-        /*
-         * ============================================================
-         * 12. SAVE
-         * ============================================================
-         */
+        // ============================================================
+        // 14. SAVE
+        // ============================================================
 
         SubscriptionHealth savedHealth =
                 subscriptionHealthRepository.save(
                         health
                 );
+
+        // ============================================================
+        // 15. LOG
+        // ============================================================
 
         log.info(
                 "Subscription health evaluated. " +
@@ -248,7 +258,9 @@ public class SubscriptionHealthEvaluatorImpl
                         "failureRate={}, " +
                         "consecutiveFailures={}, " +
                         "recentFailures={}, " +
-                        "paymentBehaviorDeclining={}",
+                        "paymentBehaviorDeclining={}, " +
+                        "lastFailureAt={}, " +
+                        "lastSuccessAt={}",
                 subscriptionId,
                 healthScore,
                 riskLevel,
@@ -257,10 +269,32 @@ public class SubscriptionHealthEvaluatorImpl
                 failureRate,
                 consecutiveFailures,
                 recentFailures,
-                paymentBehaviorDeclining
+                paymentBehaviorDeclining,
+                lastFailureAt,
+                lastSuccessAt
         );
 
         return savedHealth;
+    }
+
+    // ================================================================
+    // FIND LAST ATTEMPT TIME
+    // ================================================================
+
+    private OffsetDateTime findLastAttemptTime(
+            List<PaymentAttempt> attempts,
+            PaymentAttempt.PaymentStatus status
+    ) {
+
+        for (PaymentAttempt attempt : attempts) {
+
+            if (attempt.getStatus() == status) {
+
+                return attempt.getAttemptedAt();
+            }
+        }
+
+        return null;
     }
 
     // ================================================================
@@ -291,14 +325,8 @@ public class SubscriptionHealthEvaluatorImpl
     // ================================================================
 
     private int calculateConsecutiveFailures(
-            java.util.UUID subscriptionId
+            List<PaymentAttempt> attempts
     ) {
-
-        List<PaymentAttempt> attempts =
-                paymentAttemptRepository
-                        .findBySubscriptionIdOrderByAttemptedAtDesc(
-                                subscriptionId
-                        );
 
         int consecutiveFailures = 0;
 
@@ -328,29 +356,15 @@ public class SubscriptionHealthEvaluatorImpl
             BigDecimal failureRate
     ) {
 
-        /*
-         * Multiple consecutive failures are a strong
-         * deterioration signal.
-         */
-
         if (consecutiveFailures >= 2) {
 
             return true;
         }
 
-        /*
-         * Several failures during the recent window
-         * indicate worsening payment behavior.
-         */
-
         if (recentFailures >= 3) {
 
             return true;
         }
-
-        /*
-         * High overall failure rate is another signal.
-         */
 
         return failureRate.compareTo(
                 new BigDecimal("0.50")
@@ -371,52 +385,33 @@ public class SubscriptionHealthEvaluatorImpl
 
         double score = 1.00;
 
-        /*
-         * Payment failure rate.
-         */
-
+        // Failure rate penalty
         score -=
-                failureRate
-                        .doubleValue() * 0.50;
+                failureRate.doubleValue() * 0.50;
 
-        /*
-         * Consecutive failures.
-         */
-
+        // Consecutive failure penalty
         if (consecutiveFailures >= 1) {
-
             score -= 0.10;
         }
 
         if (consecutiveFailures >= 2) {
-
             score -= 0.10;
         }
 
         if (consecutiveFailures >= 3) {
-
             score -= 0.15;
         }
 
-        /*
-         * Recent failures.
-         */
-
+        // Recent failure penalty
         if (recentFailures >= 2) {
-
             score -= 0.05;
         }
 
         if (recentFailures >= 4) {
-
             score -= 0.10;
         }
 
-        /*
-         * Successful payment history gives
-         * a small stability boost.
-         */
-
+        // Successful history stability boost
         if (successfulPayments >= 5 &&
                 failureRate.compareTo(
                         new BigDecimal("0.20")
@@ -425,10 +420,7 @@ public class SubscriptionHealthEvaluatorImpl
             score += 0.05;
         }
 
-        /*
-         * Keep score within [0.00, 1.00].
-         */
-
+        // Keep score inside [0.00, 1.00]
         score =
                 Math.max(
                         0.0,

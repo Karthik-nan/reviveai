@@ -10,12 +10,26 @@ const recoveryCaseApi = axios.create({
 });
 
 export const getRecoveryCases = async () => {
-  const response = await recoveryCaseApi.get("/recovery-cases");
+  const response = await recoveryCaseApi.get(
+    "/recovery-cases"
+  );
+
   return response.data;
 };
 
 export const getRecoveryCaseById = async (id) => {
-  const response = await recoveryCaseApi.get(`/recovery-cases/${id}`);
+  const response = await recoveryCaseApi.get(
+    `/recovery-cases/${id}`
+  );
+
+  return response.data;
+};
+
+export const getRecoveryActions = async (id) => {
+  const response = await recoveryCaseApi.get(
+    `/recovery-cases/${id}/actions`
+  );
+
   return response.data;
 };
 

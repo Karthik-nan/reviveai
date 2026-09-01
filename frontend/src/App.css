@@ -5,6 +5,7 @@
 
   color: #172033;
   background: #f6f8fb;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -29,18 +30,18 @@ button {
   cursor: pointer;
 }
 
-/* =========================
+/* =========================================================
    APP
-========================= */
+========================================================= */
 
 .app {
   min-height: 100vh;
   display: flex;
 }
 
-/* =========================
+/* =========================================================
    SIDEBAR
-========================= */
+========================================================= */
 
 .sidebar {
   width: 245px;
@@ -115,6 +116,7 @@ button {
   border-radius: 8px;
   font-size: 13px;
   text-align: left;
+
   transition:
     background 0.15s ease,
     color 0.15s ease,
@@ -168,9 +170,9 @@ button {
   display: none;
 }
 
-/* =========================
+/* =========================================================
    MAIN
-========================= */
+========================================================= */
 
 .main-content {
   flex: 1;
@@ -196,16 +198,18 @@ button {
   border-radius: 50%;
   background: #172033;
   color: #ffffff;
+
   display: flex;
   align-items: center;
   justify-content: center;
+
   font-size: 11px;
   font-weight: 700;
 }
 
-/* =========================
+/* =========================================================
    CONTENT
-========================= */
+========================================================= */
 
 .content {
   max-width: 1500px;
@@ -213,9 +217,9 @@ button {
   padding: 35px 38px 50px;
 }
 
-/* =========================
+/* =========================================================
    PAGE HEADING
-========================= */
+========================================================= */
 
 .page-heading {
   display: flex;
@@ -249,15 +253,20 @@ button {
   border: 0;
   background: #172033;
   color: #ffffff;
+
   border-radius: 8px;
+
   padding: 10px 15px;
+
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+
   transition:
     background 0.15s ease,
     transform 0.15s ease;
@@ -271,9 +280,9 @@ button {
   transform: translateY(1px);
 }
 
-/* =========================
+/* =========================================================
    DASHBOARD METRICS
-========================= */
+========================================================= */
 
 .metrics-grid {
   display: grid;
@@ -303,6 +312,7 @@ button {
   border-radius: 8px;
   background: #f2f4f7;
   color: #566174;
+
   display: flex;
   align-items: center;
   justify-content: center;
@@ -312,6 +322,7 @@ button {
   display: flex;
   align-items: center;
   gap: 2px;
+
   font-size: 11px;
   font-weight: 600;
 }
@@ -344,9 +355,9 @@ button {
   margin-top: 5px;
 }
 
-/* =========================
+/* =========================================================
    DASHBOARD CARDS
-========================= */
+========================================================= */
 
 .dashboard-grid {
   display: grid;
@@ -396,9 +407,9 @@ button {
   border-color: #aeb6c4;
 }
 
-/* =========================
+/* =========================================================
    CHART
-========================= */
+========================================================= */
 
 .chart {
   height: 290px;
@@ -412,9 +423,11 @@ button {
 
 .y-axis {
   width: 42px;
+
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+
   padding-bottom: 24px;
 }
 
@@ -425,11 +438,15 @@ button {
 
 .bars {
   flex: 1;
+
   display: flex;
   align-items: stretch;
+
   gap: 14px;
   padding-left: 10px;
+
   border-bottom: 1px solid #edf0f3;
+
   background-image: linear-gradient(
     to bottom,
     transparent 24%,
@@ -446,16 +463,19 @@ button {
 
 .bar-column {
   flex: 1;
+
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   align-items: center;
+
   gap: 8px;
 }
 
 .bar-wrapper {
   width: 100%;
   height: calc(100% - 24px);
+
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -463,9 +483,12 @@ button {
 
 .bar {
   width: min(35px, 65%);
-  border-radius: 5px 5px 0 0;
-  background: #344054;
   min-height: 4px;
+
+  border-radius: 5px 5px 0 0;
+
+  background: #344054;
+
   transition: height 0.3s ease;
 }
 
@@ -474,17 +497,19 @@ button {
   color: #8e96a4;
 }
 
-/* =========================
+/* =========================================================
    AI INTELLIGENCE
-========================= */
+========================================================= */
 
 .ai-icon {
   width: 32px;
   height: 32px;
   border-radius: 8px;
+
   display: flex;
   align-items: center;
   justify-content: center;
+
   background: #f1f3f6;
   color: #465166;
 }
@@ -495,7 +520,9 @@ button {
 
 .insight {
   padding: 14px 0;
+
   border-bottom: 1px solid #edf0f3;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -511,12 +538,20 @@ button {
   color: #1b2435;
 }
 
+/* =========================================================
+   POLICY GUARD
+========================================================= */
+
 .policy-guard {
   margin-top: 22px;
+
   padding: 13px;
+
   border-radius: 9px;
+
   background: #f7f9fb;
   border: 1px solid #e8ebef;
+
   display: flex;
   gap: 10px;
 }
@@ -524,12 +559,16 @@ button {
 .policy-icon {
   width: 32px;
   height: 32px;
+
   border-radius: 8px;
+
   background: #e9f5ef;
   color: #21835d;
+
   display: flex;
   align-items: center;
   justify-content: center;
+
   flex-shrink: 0;
 }
 
@@ -540,14 +579,16 @@ button {
 
 .policy-guard p {
   margin: 3px 0 0;
+
   font-size: 9px;
   line-height: 1.5;
+
   color: #7e8796;
 }
 
-/* =========================
+/* =========================================================
    RECOVERY CASES
-========================= */
+========================================================= */
 
 .recovery-cases-page {
   width: 100%;
@@ -556,6 +597,7 @@ button {
 .cases-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
+
   gap: 16px;
   margin-bottom: 18px;
 }
@@ -563,34 +605,44 @@ button {
 .case-summary-card {
   background: #ffffff;
   border: 1px solid #e7eaf0;
+
   border-radius: 11px;
+
   padding: 18px 19px;
 }
 
 .case-summary-card span {
   display: block;
+
   font-size: 11px;
   color: #7f8898;
+
   margin-bottom: 7px;
 }
 
 .case-summary-card strong {
   display: block;
+
   font-size: 24px;
   line-height: 1.2;
+
   color: #172033;
+
   letter-spacing: -0.5px;
 }
 
 .cases-card {
   background: #ffffff;
   border: 1px solid #e7eaf0;
+
   border-radius: 11px;
+
   overflow: hidden;
 }
 
 .cases-card .card-header {
   padding: 21px;
+
   border-bottom: 1px solid #edf0f3;
 }
 
@@ -602,27 +654,40 @@ button {
 .cases-table {
   width: 100%;
   border-collapse: collapse;
+
   min-width: 900px;
 }
 
 .cases-table th {
   padding: 12px 20px;
+
   text-align: left;
+
   background: #fafbfc;
+
   border-bottom: 1px solid #edf0f3;
+
   color: #8992a3;
+
   font-size: 10px;
   font-weight: 700;
+
   text-transform: uppercase;
+
   letter-spacing: 0.05em;
+
   white-space: nowrap;
 }
 
 .cases-table td {
   padding: 15px 20px;
+
   border-bottom: 1px solid #f0f2f5;
+
   color: #5f6879;
+
   font-size: 11px;
+
   white-space: nowrap;
 }
 
@@ -630,10 +695,13 @@ button {
   border-bottom: 0;
 }
 
-/* Clickable rows */
+/* =========================================================
+   CLICKABLE CASE ROW
+========================================================= */
 
 .clickable-case-row {
   cursor: pointer;
+
   transition:
     background 0.15s ease,
     box-shadow 0.15s ease;
@@ -647,9 +715,9 @@ button {
   background: #f3f5f8;
 }
 
-/* =========================
+/* =========================================================
    CASE ID
-========================= */
+========================================================= */
 
 .case-id {
   display: flex;
@@ -667,47 +735,60 @@ button {
   color: #9aa2b1;
 }
 
-/* =========================
+/* =========================================================
    RECOVERY SCORE
-========================= */
+========================================================= */
 
 .score {
   display: flex;
   align-items: center;
+
   gap: 9px;
+
   min-width: 100px;
 }
 
 .score-bar {
   width: 58px;
   height: 5px;
+
   background: #e9edf2;
+
   border-radius: 10px;
+
   overflow: hidden;
 }
 
 .score-fill {
   height: 100%;
+
   background: #344054;
+
   border-radius: 10px;
+
   transition: width 0.25s ease;
 }
 
 .score span {
   font-size: 10px;
+
   color: #697386;
+
   font-weight: 600;
 }
 
-/* =========================
+/* =========================================================
    RECOVERY POTENTIAL
-========================= */
+========================================================= */
 
 .potential {
   display: inline-flex;
   align-items: center;
+
   padding: 4px 8px;
+
   border-radius: 5px;
+
   font-size: 9px;
   font-weight: 700;
 }
@@ -732,16 +813,20 @@ button {
   color: #697386;
 }
 
-/* =========================
+/* =========================================================
    CASE STATUS
-========================= */
+========================================================= */
 
 .case-status {
   display: inline-flex;
   align-items: center;
+
   gap: 5px;
+
   padding: 4px 8px;
+
   border-radius: 5px;
+
   font-size: 9px;
   font-weight: 700;
 }
@@ -766,31 +851,40 @@ button {
   color: #21835d;
 }
 
-/* =========================
+/* =========================================================
    EMPTY TABLE
-========================= */
+========================================================= */
 
 .empty-table {
   height: 150px;
+
   text-align: center !important;
+
   color: #929aa8 !important;
 }
 
-/* =========================
+/* =========================================================
    PAGE STATES
-========================= */
+========================================================= */
 
 .loading-card,
 .error-card {
   min-height: 180px;
+
   background: #ffffff;
+
   border: 1px solid #e7eaf0;
+
   border-radius: 11px;
+
   display: flex;
   align-items: center;
   justify-content: center;
+
   gap: 10px;
+
   color: #717b8d;
+
   font-size: 13px;
 }
 
@@ -800,11 +894,17 @@ button {
 
 .error-card button {
   border: 1px solid #d9dde4;
+
   background: #ffffff;
+
   color: #4e586b;
+
   border-radius: 6px;
+
   padding: 6px 11px;
+
   font-size: 11px;
+
   transition: background 0.15s ease;
 }
 
@@ -814,15 +914,23 @@ button {
 
 .page-state {
   min-height: 300px;
+
   background: #ffffff;
+
   border: 1px solid #e7eaf0;
+
   border-radius: 11px;
+
   display: flex;
   flex-direction: column;
+
   align-items: center;
   justify-content: center;
+
   gap: 12px;
+
   color: #717b8d;
+
   font-size: 13px;
 }
 
@@ -830,16 +938,20 @@ button {
   margin: 0;
 }
 
-/* =========================
+/* =========================================================
    SPINNER
-========================= */
+========================================================= */
 
 .spinner {
   width: 17px;
   height: 17px;
+
   border: 2px solid #e1e5ea;
+
   border-top-color: #344054;
+
   border-radius: 50%;
+
   animation: spin 0.8s linear infinite;
 }
 
@@ -849,9 +961,593 @@ button {
   }
 }
 
-/* =========================
+/* =========================================================
+   RECOVERY CASE DETAILS
+========================================================= */
+
+.recovery-details-page {
+  width: 100%;
+}
+
+/* =========================================================
+   BACK BUTTON
+========================================================= */
+
+.back-button {
+  border: 0;
+  background: transparent;
+
+  color: #697386;
+
+  display: inline-flex;
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 0;
+
+  margin-bottom: 22px;
+
+  font-size: 11px;
+  font-weight: 600;
+
+  transition: color 0.15s ease;
+}
+
+.back-button:hover {
+  color: #172033;
+}
+
+/* =========================================================
+   DETAILS GRID
+========================================================= */
+
+.details-grid {
+  display: grid;
+
+  grid-template-columns: repeat(2, 1fr);
+
+  gap: 18px;
+
+  margin-bottom: 18px;
+}
+
+/* =========================================================
+   DETAIL CARD
+========================================================= */
+
+.detail-card {
+  background: #ffffff;
+
+  border: 1px solid #e7eaf0;
+
+  border-radius: 11px;
+
+  padding: 21px;
+}
+
+.detail-card-header {
+  display: flex;
+
+  align-items: center;
+
+  gap: 11px;
+}
+
+.detail-card-header h2 {
+  margin: 0;
+
+  font-size: 14px;
+
+  color: #202a3c;
+}
+
+.detail-card-header span {
+  display: block;
+
+  color: #929aa8;
+
+  font-size: 10px;
+
+  margin-top: 4px;
+}
+
+.detail-icon {
+  width: 34px;
+  height: 34px;
+
+  border-radius: 8px;
+
+  background: #f2f4f7;
+
+  color: #566174;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+}
+
+/* =========================================================
+   DETAIL METRICS
+========================================================= */
+
+.detail-metrics {
+  display: grid;
+
+  grid-template-columns: repeat(2, 1fr);
+
+  gap: 1px;
+
+  margin-top: 24px;
+
+  background: #edf0f3;
+
+  border: 1px solid #edf0f3;
+
+  border-radius: 8px;
+
+  overflow: hidden;
+}
+
+.detail-metric {
+  background: #ffffff;
+
+  padding: 16px;
+}
+
+.detail-metric span {
+  display: block;
+
+  font-size: 10px;
+
+  color: #8992a3;
+
+  margin-bottom: 6px;
+}
+
+.detail-metric strong {
+  display: block;
+
+  font-size: 18px;
+
+  color: #172033;
+
+  font-weight: 700;
+
+  letter-spacing: -0.3px;
+}
+
+/* =========================================================
+   DETAILS CARD
+========================================================= */
+
+.details-card {
+  background: #ffffff;
+
+  border: 1px solid #e7eaf0;
+
+  border-radius: 11px;
+
+  padding: 21px;
+
+  margin-bottom: 18px;
+}
+
+/* =========================================================
+   LARGE RECOVERY SCORE
+========================================================= */
+
+.large-score {
+  font-size: 24px;
+
+  font-weight: 700;
+
+  color: #172033;
+
+  letter-spacing: -0.5px;
+}
+
+.large-score-bar {
+  width: 100%;
+
+  height: 9px;
+
+  background: #e9edf2;
+
+  border-radius: 20px;
+
+  overflow: hidden;
+
+  margin-top: 24px;
+}
+
+.large-score-fill {
+  height: 100%;
+
+  background: #344054;
+
+  border-radius: 20px;
+
+  transition: width 0.4s ease;
+}
+
+/* =========================================================
+   INFORMATION GRID
+========================================================= */
+
+.information-grid {
+  display: grid;
+
+  grid-template-columns: repeat(2, 1fr);
+
+  gap: 0 28px;
+
+  margin-top: 8px;
+}
+
+.info-row {
+  min-width: 0;
+
+  padding: 15px 0;
+
+  border-bottom: 1px solid #edf0f3;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 5px;
+}
+
+.info-row span {
+  font-size: 10px;
+
+  color: #929aa8;
+}
+
+.info-row strong {
+  min-width: 0;
+
+  font-size: 11px;
+
+  color: #273144;
+
+  font-weight: 600;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+}
+
+/* =========================================================
+   RECOVERY ACTION
+========================================================= */
+
+.recovery-action-card {
+  background: #ffffff;
+
+  border: 1px solid #e7eaf0;
+
+  border-radius: 11px;
+
+  padding: 21px;
+
+  margin-bottom: 18px;
+}
+
+/* =========================================================
+   ACTION HEADER
+========================================================= */
+
+.recovery-action-header {
+  display: flex;
+
+  align-items: flex-start;
+
+  justify-content: space-between;
+
+  gap: 20px;
+}
+
+.recovery-action-title {
+  display: flex;
+
+  align-items: flex-start;
+
+  gap: 11px;
+}
+
+.recovery-action-icon {
+  width: 34px;
+  height: 34px;
+
+  border-radius: 8px;
+
+  background: #f2f4f7;
+
+  color: #566174;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+}
+
+.recovery-action-title h2 {
+  margin: 0;
+
+  font-size: 14px;
+
+  color: #202a3c;
+}
+
+.recovery-action-title span {
+  display: block;
+
+  margin-top: 4px;
+
+  font-size: 10px;
+
+  color: #929aa8;
+}
+
+/* =========================================================
+   ACTION CONTENT
+========================================================= */
+
+.recovery-action-content {
+  margin-top: 22px;
+}
+
+/* =========================================================
+   ACTION SUMMARY
+========================================================= */
+
+.action-summary {
+  display: grid;
+
+  grid-template-columns: 1.5fr 1fr 1fr;
+
+  gap: 1px;
+
+  background: #edf0f3;
+
+  border: 1px solid #edf0f3;
+
+  border-radius: 8px;
+
+  overflow: hidden;
+}
+
+.action-summary-item {
+  background: #ffffff;
+
+  padding: 16px;
+
+  min-width: 0;
+}
+
+.action-summary-item span {
+  display: block;
+
+  margin-bottom: 6px;
+
+  font-size: 10px;
+
+  color: #8992a3;
+}
+
+.action-summary-item strong {
+  display: block;
+
+  font-size: 14px;
+
+  color: #172033;
+
+  font-weight: 700;
+}
+
+/* =========================================================
+   ACTION STRATEGY
+========================================================= */
+
+.action-strategy {
+  font-size: 15px !important;
+
+  letter-spacing: -0.2px;
+}
+
+/* =========================================================
+   ACTION BADGES
+========================================================= */
+
+.action-badge {
+  display: inline-flex !important;
+
+  align-items: center;
+
+  width: fit-content;
+
+  padding: 4px 8px;
+
+  border-radius: 5px;
+
+  font-size: 9px !important;
+
+  font-weight: 700;
+
+  line-height: 1.2;
+}
+
+/* PRIORITY */
+
+.action-priority-high {
+  background: #fff0f0;
+
+  color: #b64040;
+}
+
+.action-priority-medium-high {
+  background: #fff7e8;
+
+  color: #a66a00;
+}
+
+.action-priority-medium {
+  background: #eef3fb;
+
+  color: #41658f;
+}
+
+.action-priority-low {
+  background: #f2f4f7;
+
+  color: #697386;
+}
+
+/* STATUS */
+
+.action-status-pending {
+  background: #fff7e8;
+
+  color: #a66a00;
+}
+
+.action-status-executed {
+  background: #edf8f3;
+
+  color: #21835d;
+}
+
+.action-status-failed {
+  background: #fff0f0;
+
+  color: #b64040;
+}
+
+/* =========================================================
+   ACTION DETAILS
+========================================================= */
+
+.action-details {
+  display: grid;
+
+  grid-template-columns: repeat(3, 1fr);
+
+  gap: 16px;
+
+  margin-top: 18px;
+}
+
+.action-detail {
+  min-width: 0;
+}
+
+.action-detail span {
+  display: block;
+
+  font-size: 10px;
+
+  color: #929aa8;
+
+  margin-bottom: 5px;
+}
+
+.action-detail strong {
+  display: block;
+
+  font-size: 12px;
+
+  color: #273144;
+
+  font-weight: 600;
+}
+
+/* =========================================================
+   ACTION REASON
+========================================================= */
+
+.action-reason {
+  margin-top: 18px;
+
+  padding: 14px 16px;
+
+  background: #f7f9fb;
+
+  border: 1px solid #e8ebef;
+
+  border-radius: 8px;
+}
+
+.action-reason-label {
+  display: block;
+
+  font-size: 10px;
+
+  color: #8992a3;
+
+  margin-bottom: 6px;
+
+  font-weight: 600;
+}
+
+.action-reason p {
+  margin: 0;
+
+  font-size: 11px;
+
+  line-height: 1.6;
+
+  color: #4f596b;
+}
+
+/* =========================================================
+   NO RECOVERY ACTION
+========================================================= */
+
+.no-recovery-action {
+  margin-top: 18px;
+
+  padding: 15px;
+
+  background: #f7f9fb;
+
+  border: 1px solid #e8ebef;
+
+  border-radius: 8px;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 9px;
+
+  color: #697386;
+
+  font-size: 11px;
+}
+
+.no-recovery-action svg {
+  color: #566174;
+
+  flex-shrink: 0;
+}
+
+/* =========================================================
+   DETAIL POLICY GUARD
+========================================================= */
+
+.detail-policy {
+  margin-top: 0;
+
+  margin-bottom: 0;
+}
+
+/* =========================================================
    RESPONSIVE - TABLET
-========================= */
+========================================================= */
 
 @media (max-width: 1100px) {
   .metrics-grid {
@@ -867,16 +1563,49 @@ button {
   }
 }
 
-/* =========================
+/* =========================================================
+   RESPONSIVE - DETAILS TABLET
+========================================================= */
+
+@media (max-width: 900px) {
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .information-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .action-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .action-summary-item:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .action-details {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* =========================================================
    RESPONSIVE - MOBILE
-========================= */
+========================================================= */
 
 @media (max-width: 760px) {
+  /* =======================================================
+     SIDEBAR
+  ======================================================= */
+
   .sidebar {
     position: fixed;
+
     left: -260px;
     top: 0;
+
     z-index: 20;
+
     transition: left 0.2s ease;
   }
 
@@ -886,17 +1615,25 @@ button {
 
   .sidebar-overlay {
     position: fixed;
+
     inset: 0;
+
     z-index: 10;
+
     background: rgba(15, 23, 42, 0.25);
   }
 
   .mobile-close {
     display: block;
+
     margin-left: auto;
+
     border: 0;
+
     background: transparent;
+
     color: #697386;
+
     padding: 4px;
   }
 
@@ -906,9 +1643,13 @@ button {
 
   .mobile-menu {
     display: flex;
+
     border: 0;
+
     background: transparent;
+
     color: #4c5668;
+
     padding: 5px;
   }
 
@@ -920,6 +1661,10 @@ button {
     display: block;
   }
 
+  /* =======================================================
+     CONTENT
+  ======================================================= */
+
   .content {
     padding: 25px 18px 40px;
   }
@@ -930,6 +1675,7 @@ button {
 
   .page-heading {
     align-items: flex-start;
+
     flex-direction: column;
   }
 
@@ -939,8 +1685,13 @@ button {
 
   .analysis-button {
     width: 100%;
+
     justify-content: center;
   }
+
+  /* =======================================================
+     DASHBOARD
+  ======================================================= */
 
   .metrics-grid {
     grid-template-columns: 1fr;
@@ -963,11 +1714,57 @@ button {
   .cases-table td {
     padding: 12px 14px;
   }
+
+  /* =======================================================
+     DETAILS
+  ======================================================= */
+
+  .detail-card,
+  .details-card {
+    padding: 16px;
+  }
+
+  .detail-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .details-card .card-header {
+    gap: 15px;
+  }
+
+  .large-score {
+    font-size: 21px;
+  }
+
+  /* =======================================================
+     RECOVERY ACTION
+  ======================================================= */
+
+  .recovery-action-card {
+    padding: 16px;
+  }
+
+  .recovery-action-header {
+    gap: 12px;
+  }
+
+  .action-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .action-summary-item:first-child {
+    grid-column: auto;
+  }
+
+  .action-details {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
 }
 
-/* =========================
+/* =========================================================
    SMALL MOBILE
-========================= */
+========================================================= */
 
 @media (max-width: 480px) {
   .content {
@@ -980,6 +1777,7 @@ button {
 
   .page-heading p {
     font-size: 12px;
+
     line-height: 1.5;
   }
 
@@ -1002,6 +1800,7 @@ button {
 
   .bars {
     gap: 7px;
+
     padding-left: 5px;
   }
 
@@ -1011,5 +1810,559 @@ button {
 
   .y-axis {
     width: 35px;
+  }
+
+  /* =======================================================
+     DETAILS
+  ======================================================= */
+
+  .back-button {
+    margin-bottom: 18px;
+  }
+
+  .detail-card-header h2 {
+    font-size: 13px;
+  }
+
+  .detail-metric strong {
+    font-size: 17px;
+  }
+
+  .large-score-bar {
+    height: 8px;
+  }
+
+  .info-row strong {
+    max-width: 100%;
+  }
+
+  /* =======================================================
+     RECOVERY ACTION
+  ======================================================= */
+
+  .recovery-action-card {
+    padding: 16px;
+  }
+
+  .recovery-action-title h2 {
+    font-size: 13px;
+  }
+
+  .action-summary-item strong {
+    font-size: 13px;
+  }
+
+  .action-strategy {
+    font-size: 14px !important;
+  }
+
+  .action-reason p {
+    font-size: 10px;
+  }
+}
+/* =========================================================
+   SUBSCRIPTIONS
+========================================================= */
+
+.subscriptions-card {
+  background: #ffffff;
+  border: 1px solid #e8ebef;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.subscriptions-card .card-header {
+  padding: 20px 22px;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.subscription-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 240px;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid #dfe3e8;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.subscription-search svg {
+  flex-shrink: 0;
+  color: #7b8490;
+}
+
+.subscription-search input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: #202631;
+}
+
+.subscription-search input::placeholder {
+  color: #9aa1aa;
+}
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.subscriptions-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1050px;
+}
+
+.subscriptions-table th {
+  padding: 12px 18px;
+  text-align: left;
+  background: #fafbfc;
+  border-bottom: 1px solid #eef0f3;
+  color: #69727d;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.subscriptions-table td {
+  padding: 15px 18px;
+  border-bottom: 1px solid #f0f2f4;
+  color: #303742;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.subscriptions-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.subscriptions-table tbody tr:hover {
+  background: #fafbfc;
+}
+
+.subscription-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.subscription-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  background: #f2f4f7;
+  color: #4b5563;
+  flex-shrink: 0;
+}
+
+.subscription-name div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.subscription-name strong {
+  color: #202631;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.subscription-name span {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #9aa1aa;
+  font-size: 11px;
+}
+
+.customer-id {
+  color: #59636f;
+  font-size: 12px;
+}
+
+.subscription-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.subscription-status.active {
+  background: #eef7f1;
+  color: #28734a;
+}
+
+.subscription-status.past-due {
+  background: #fff5e8;
+  color: #a56300;
+}
+
+.subscription-status.cancelled {
+  background: #f5f5f6;
+  color: #6f747b;
+}
+
+.risk-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.risk-value {
+  width: 38px;
+  color: #303742;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.risk-bar {
+  width: 55px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #edf0f2;
+}
+
+.risk-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #5f6874;
+}
+
+@media (max-width: 768px) {
+  .subscriptions-card .card-header {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .subscription-search {
+    width: 200px;
+  }
+}
+
+/* =========================================================
+   SUBSCRIPTION DETAILS
+========================================================= */
+
+.subscription-row {
+  cursor: pointer;
+}
+
+.subscription-row:hover {
+  background: #f8fafc;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #69727d;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  color: #202631;
+}
+
+.subscription-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.detail-list {
+  padding: 6px 22px 18px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row span {
+  color: #737c87;
+  font-size: 12px;
+}
+
+.detail-row strong {
+  max-width: 65%;
+  overflow: hidden;
+  color: #303742;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+.risk-summary {
+  padding: 18px 22px;
+}
+
+.risk-score-large {
+  margin-bottom: 14px;
+  color: #202631;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.risk-bar-large {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #edf0f2;
+}
+
+.risk-bar-large-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #5f6874;
+}
+
+.risk-summary p {
+  margin-top: 14px;
+  color: #7b8490;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .subscription-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .detail-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .detail-row strong {
+    max-width: 100%;
+    text-align: left;
+  }
+}
+
+/* =========================================================
+   SUBSCRIPTION DETAILS
+========================================================= */
+
+.subscription-row {
+  cursor: pointer;
+}
+
+.subscription-row:hover {
+  background: #f8fafc;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #69727d;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  color: #202631;
+}
+
+.subscription-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.detail-list {
+  padding: 6px 22px 18px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid #eef0f3;
+}
+
+.detail-row:last-child {
+  border-bottom: none;
+}
+
+.detail-row span {
+  color: #737c87;
+  font-size: 12px;
+}
+
+.detail-row strong {
+  max-width: 65%;
+  overflow: hidden;
+  color: #303742;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+}
+
+.risk-summary {
+  padding: 18px 22px;
+}
+
+.risk-score-large {
+  margin-bottom: 14px;
+  color: #202631;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.risk-bar-large {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #edf0f2;
+}
+
+.risk-bar-large-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #5f6874;
+}
+
+.risk-summary p {
+  margin-top: 14px;
+  color: #7b8490;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.subscription-recovery-card {
+  margin-top: 18px;
+}
+
+.recovery-case-count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #f2f4f7;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recovery-case-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.recovery-case-name > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.recovery-case-name strong {
+  max-width: 190px;
+  overflow: hidden;
+  color: #202631;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.recovery-case-name span {
+  max-width: 190px;
+  overflow: hidden;
+  color: #9aa1aa;
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.recovery-case-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.recovery-case-status.open {
+  background: #fff5e8;
+  color: #a56300;
+}
+
+.recovery-case-status.in-progress {
+  background: #eef3f8;
+  color: #4c6379;
+}
+
+.recovery-case-status.recovered {
+  background: #eef7f1;
+  color: #28734a;
+}
+
+.recovery-case-status.failed {
+  background: #fbeeee;
+  color: #a34848;
+}
+
+@media (max-width: 900px) {
+  .subscription-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .detail-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .detail-row strong {
+    max-width: 100%;
+    text-align: left;
   }
 }

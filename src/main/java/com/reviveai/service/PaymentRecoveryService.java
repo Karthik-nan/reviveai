@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -63,6 +63,12 @@ public class PaymentRecoveryService {
     // =========================================================
 
     private final RecoveryActionOrchestrator recoveryActionOrchestrator;
+
+    // =========================================================
+    // AUDIT
+    // =========================================================
+
+    private final AuditEventService auditEventService;
 
 
     // =========================================================
@@ -210,17 +216,13 @@ public class PaymentRecoveryService {
         // =====================================================
 
         Subscription subscription =
-                subscriptionRepository
-                        .findByExternalSubscriptionId(
-                                subscriptionId
-                        )
-                        .orElse(null);
+                findSubscription(subscriptionId);
 
         if (subscription == null) {
 
             log.warn(
                     "Subscription not found. " +
-                            "externalSubscriptionId={}, paymentId={}",
+                            "subscriptionId={}, paymentId={}",
                     subscriptionId,
                     paymentId
             );
@@ -232,7 +234,7 @@ public class PaymentRecoveryService {
                 "Subscription found. " +
                         "internalId={}, externalSubscriptionId={}",
                 subscription.getId(),
-                subscriptionId
+                subscription.getExternalSubscriptionId()
         );
 
         // =====================================================
@@ -436,9 +438,13 @@ public class PaymentRecoveryService {
                     );
 
             // Link the payment attempt back to the recovery case
-            paymentAttempt.setRecoveryCase(recoveryCase);
+            paymentAttempt.setRecoveryCase(
+                    recoveryCase
+            );
 
-            paymentAttemptRepository.save(paymentAttempt);
+            paymentAttemptRepository.save(
+                    paymentAttempt
+            );
 
         } catch (Exception exception) {
 
@@ -460,6 +466,23 @@ public class PaymentRecoveryService {
                 paymentId,
                 amount,
                 recoveryPotential
+        );
+
+        // =====================================================
+        // AUDIT: RECOVERY CASE CREATED
+        // =====================================================
+
+        auditEventService.record(
+                "RECOVERY_CASE_CREATED",
+                "RECOVERY_CASE",
+                recoveryCase.getId(),
+                "SYSTEM",
+                String.format(
+                        "{\"paymentId\":\"%s\",\"amountAtRisk\":%s,\"recoveryPotential\":\"%s\"}",
+                        paymentId,
+                        amount,
+                        recoveryPotential
+                )
         );
 
         // =====================================================
@@ -638,6 +661,23 @@ public class PaymentRecoveryService {
         );
 
         // =====================================================
+        // AUDIT: ML PREDICTION
+        // =====================================================
+
+        auditEventService.record(
+                "ML_PREDICTION_GENERATED",
+                "RECOVERY_CASE",
+                recoveryCase.getId(),
+                "ML_MODEL",
+                String.format(
+                        "{\"recoveryProbability\":%s,\"modelVersion\":\"%s\",\"reason\":\"%s\"}",
+                        recoveryScore,
+                        prediction.getModelVersion(),
+                        prediction.getPredictionReason()
+                )
+        );
+
+        // =====================================================
         // 20. DETERMINE RULE-BASED STRATEGY
         // =====================================================
 
@@ -680,6 +720,22 @@ public class PaymentRecoveryService {
                     ruleBasedPriority
             );
 
+            // =================================================
+            // AUDIT: RULE DECISION
+            // =================================================
+
+            auditEventService.record(
+                    "RULE_DECISION_GENERATED",
+                    "RECOVERY_CASE",
+                    recoveryCase.getId(),
+                    "RULE_ENGINE",
+                    String.format(
+                            "{\"strategy\":\"%s\",\"priority\":\"%s\"}",
+                            ruleBasedStrategy,
+                            ruleBasedPriority
+                    )
+            );
+
         } else {
 
             log.warn(
@@ -699,7 +755,9 @@ public class PaymentRecoveryService {
                         .recoveryCaseId(
                                 recoveryCase.getId()
                         )
-                        .paymentAmount(amount)
+                        .paymentAmount(
+                                amount
+                        )
                         .recoveryScore(
                                 recoveryScore
                         )
@@ -812,6 +870,24 @@ public class PaymentRecoveryService {
         );
 
         // =====================================================
+        // AUDIT: POLICY DECISION
+        // =====================================================
+
+        auditEventService.record(
+                "POLICY_DECISION",
+                "RECOVERY_CASE",
+                recoveryCase.getId(),
+                "POLICY_ENGINE",
+                String.format(
+                        "{\"strategy\":\"%s\",\"priority\":\"%s\",\"fallbackUsed\":%s,\"reason\":\"%s\"}",
+                        finalDecision.getRecommendedStrategy(),
+                        finalDecision.getPriority(),
+                        finalDecision.isFallbackUsed(),
+                        finalDecision.getReason()
+                )
+        );
+
+        // =====================================================
         // 24. MARK CASE IN PROGRESS
         // =====================================================
 
@@ -841,6 +917,22 @@ public class PaymentRecoveryService {
                     recoveryCase.getId(),
                     finalDecision.getRecommendedStrategy(),
                     recoveryCase.getStatus()
+            );
+
+            // =================================================
+            // AUDIT: RECOVERY ACTION EXECUTED
+            // =================================================
+
+            auditEventService.record(
+                    "RECOVERY_ACTION_EXECUTED",
+                    "RECOVERY_CASE",
+                    recoveryCase.getId(),
+                    "SYSTEM",
+                    String.format(
+                            "{\"strategy\":\"%s\",\"status\":\"%s\"}",
+                            finalDecision.getRecommendedStrategy(),
+                            recoveryCase.getStatus()
+                    )
             );
 
         } catch (Exception exception) {
@@ -895,6 +987,7 @@ public class PaymentRecoveryService {
      *      ↓
      * reevaluate subscription health
      */
+
     @Transactional
     public void processPaymentSuccess(
             PaymentFailedEvent event
@@ -1001,17 +1094,13 @@ public class PaymentRecoveryService {
         // =====================================================
 
         Subscription subscription =
-                subscriptionRepository
-                        .findByExternalSubscriptionId(
-                                subscriptionId
-                        )
-                        .orElse(null);
+                findSubscription(subscriptionId);
 
         if (subscription == null) {
 
             log.warn(
                     "Subscription not found for successful payment. " +
-                            "externalSubscriptionId={}, paymentId={}",
+                            "subscriptionId={}, paymentId={}",
                     subscriptionId,
                     paymentId
             );
@@ -1023,7 +1112,7 @@ public class PaymentRecoveryService {
                 "Subscription found for successful payment. " +
                         "internalId={}, externalSubscriptionId={}",
                 subscription.getId(),
-                subscriptionId
+                subscription.getExternalSubscriptionId()
         );
 
         // =====================================================
@@ -1081,6 +1170,7 @@ public class PaymentRecoveryService {
             /*
              * If it is already SUCCESS, the event is a duplicate.
              */
+
             if (successfulAttempt.getStatus()
                     == PaymentAttempt.PaymentStatus.SUCCESS) {
 
@@ -1091,6 +1181,7 @@ public class PaymentRecoveryService {
              * If a previous failure attempt somehow used the same
              * payment ID, update it to SUCCESS.
              */
+
             successfulAttempt.setStatus(
                     PaymentAttempt.PaymentStatus.SUCCESS
             );
@@ -1224,6 +1315,7 @@ public class PaymentRecoveryService {
         /*
          * Do not record more than the actual captured amount.
          */
+
         if (amountRecovered.compareTo(amount) > 0) {
 
             amountRecovered = amount;
@@ -1263,6 +1355,23 @@ public class PaymentRecoveryService {
                 paymentId,
                 recoveryCase.getAmountAtRisk(),
                 amountRecovered
+        );
+
+        // =====================================================
+        // AUDIT: RECOVERY COMPLETED
+        // =====================================================
+
+        auditEventService.record(
+                "RECOVERY_COMPLETED",
+                "RECOVERY_CASE",
+                recoveryCase.getId(),
+                "PAYMENT_WEBHOOK",
+                String.format(
+                        "{\"paymentId\":\"%s\",\"amountAtRisk\":%s,\"amountRecovered\":%s}",
+                        paymentId,
+                        recoveryCase.getAmountAtRisk(),
+                        amountRecovered
+                )
         );
 
         // =====================================================
@@ -1333,6 +1442,93 @@ public class PaymentRecoveryService {
 
 
     // =========================================================
+    // FIND SUBSCRIPTION
+    // =========================================================
+
+    /**
+     * Resolves a subscription from either:
+     *
+     * 1. Internal UUID
+     * 2. External Razorpay subscription ID
+     *
+     * This is important because webhook test payloads may contain
+     * our internal UUID while real Razorpay events may contain the
+     * external subscription ID.
+     */
+
+    private Subscription findSubscription(
+            String subscriptionId
+    ) {
+
+        if (subscriptionId == null
+                || subscriptionId.isBlank()) {
+
+            return null;
+        }
+
+        // =====================================================
+        // 1. TRY INTERNAL UUID
+        // =====================================================
+
+        try {
+
+            UUID internalSubscriptionId =
+                    UUID.fromString(subscriptionId);
+
+            Subscription subscription =
+                    subscriptionRepository
+                            .findById(
+                                    internalSubscriptionId
+                            )
+                            .orElse(null);
+
+            if (subscription != null) {
+
+                log.debug(
+                        "Subscription resolved using internal UUID. " +
+                                "subscriptionId={}, internalId={}",
+                        subscriptionId,
+                        subscription.getId()
+                );
+
+                return subscription;
+            }
+
+        } catch (IllegalArgumentException ignored) {
+
+            /*
+             * Incoming subscription ID is not a UUID.
+             *
+             * Continue with external ID lookup.
+             */
+        }
+
+        // =====================================================
+        // 2. TRY EXTERNAL SUBSCRIPTION ID
+        // =====================================================
+
+        Subscription subscription =
+                subscriptionRepository
+                        .findByExternalSubscriptionId(
+                                subscriptionId
+                        )
+                        .orElse(null);
+
+        if (subscription != null) {
+
+            log.debug(
+                    "Subscription resolved using external subscription ID. " +
+                            "externalSubscriptionId={}, internalId={}",
+                    subscriptionId,
+                    subscription.getId()
+            );
+        }
+
+        return subscription;
+    }
+
+
+    // =========================================================
     // FIND MATCHING RECOVERY CASE
     // =========================================================
 
@@ -1340,14 +1536,13 @@ public class PaymentRecoveryService {
      * Finds the recovery case that belongs to the failed payment
      * associated with the successful recovery payment.
      *
-     * Important:
-     *
      * We intentionally do NOT blindly select the only IN_PROGRESS
      * recovery case for a subscription.
      *
      * The failed payment relationship must match the payment that
      * initiated the recovery flow.
      */
+
     private RecoveryCase findMatchingRecoveryCase(
             Subscription subscription,
             String successfulPaymentId,
@@ -1383,6 +1578,7 @@ public class PaymentRecoveryService {
          *
          * subscription + order ID + FAILED status
          */
+
         PaymentAttempt failedPayment =
                 paymentAttemptRepository
                         .findFirstBySubscriptionIdAndExternalOrderIdAndStatus(
@@ -1416,6 +1612,7 @@ public class PaymentRecoveryService {
         /*
          * Find the recovery case belonging to that failed payment.
          */
+
         RecoveryCase recoveryCase =
                 recoveryCaseRepository
                         .findByFailedPaymentId(
@@ -1438,6 +1635,7 @@ public class PaymentRecoveryService {
         /*
          * Only IN_PROGRESS cases can be completed.
          */
+
         if (recoveryCase.getStatus()
                 != RecoveryCase.RecoveryStatus.IN_PROGRESS) {
 
@@ -1465,6 +1663,7 @@ public class PaymentRecoveryService {
 
         return recoveryCase;
     }
+
 
     // =========================================================
     // RECOVERY POTENTIAL
@@ -1550,6 +1749,21 @@ public class PaymentRecoveryService {
                         "recoveryCaseId={}, reason={}",
                 recoveryCase.getId(),
                 reason
+        );
+
+        // =====================================================
+        // AUDIT: RECOVERY ESCALATED
+        // =====================================================
+
+        auditEventService.record(
+                "RECOVERY_ESCALATED",
+                "RECOVERY_CASE",
+                recoveryCase.getId(),
+                "SYSTEM",
+                String.format(
+                        "{\"reason\":\"%s\"}",
+                        reason
+                )
         );
     }
 }

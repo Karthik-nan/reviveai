@@ -6,14 +6,23 @@ import {
   Clock3,
   CreditCard,
   ShieldCheck,
+  Zap,
 } from "lucide-react";
 
-import { getRecoveryCaseById } from "../api/recoveryCaseApi";
+import {
+  getRecoveryCaseById,
+  getRecoveryActions,
+} from "../api/recoveryCaseApi";
 
 function RecoveryCaseDetails({ id, onBack }) {
   const [recoveryCase, setRecoveryCase] = useState(null);
+  const [recoveryActions, setRecoveryActions] = useState([]);
+
   const [loading, setLoading] = useState(true);
+  const [actionsLoading, setActionsLoading] = useState(true);
+
   const [error, setError] = useState(null);
+  const [actionsError, setActionsError] = useState(null);
 
   useEffect(() => {
     loadCase();
@@ -22,38 +31,106 @@ function RecoveryCaseDetails({ id, onBack }) {
   const loadCase = async () => {
     try {
       setLoading(true);
+      setActionsLoading(true);
 
-      const data = await getRecoveryCaseById(id);
-
-      setRecoveryCase(data);
       setError(null);
+      setActionsError(null);
+
+      /*
+       * Load recovery case
+       */
+      const caseData = await getRecoveryCaseById(id);
+
+      setRecoveryCase(caseData);
+
+      /*
+       * Load recovery actions for this case
+       */
+      try {
+        const actionData = await getRecoveryActions(id);
+
+        setRecoveryActions(
+          Array.isArray(actionData)
+            ? actionData
+            : []
+        );
+      } catch (actionError) {
+        console.error(
+          "Failed to load recovery actions:",
+          actionError
+        );
+
+        setRecoveryActions([]);
+
+        setActionsError(
+          "Unable to load recovery actions."
+        );
+      } finally {
+        setActionsLoading(false);
+      }
     } catch (err) {
-      console.error("Failed to load recovery case:", err);
-      setError("Unable to load recovery case.");
+      console.error(
+        "Failed to load recovery case:",
+        err
+      );
+
+      setError(
+        "Unable to load recovery case."
+      );
+
+      setActionsLoading(false);
     } finally {
       setLoading(false);
     }
   };
 
+  /*
+   * =========================================================
+   * FORMATTERS
+   * =========================================================
+   */
+
   const formatCurrency = (value) => {
-    return `₹${Number(value || 0).toLocaleString("en-IN", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+    return `₹${Number(value || 0).toLocaleString(
+      "en-IN",
+      {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }
+    )}`;
   };
 
   const formatScore = (value) => {
-    return `${(Number(value || 0) * 100).toFixed(0)}%`;
+    return `${(
+      Number(value || 0) * 100
+    ).toFixed(0)}%`;
   };
 
   const formatDate = (value) => {
-    if (!value) return "—";
+    if (!value) {
+      return "—";
+    }
 
-    return new Date(value).toLocaleString("en-IN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "—";
+    }
+
+    return date.toLocaleString(
+      "en-IN",
+      {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }
+    );
   };
+
+  /*
+   * =========================================================
+   * STATUS
+   * =========================================================
+   */
 
   const getStatusClass = (status) => {
     switch (status) {
@@ -74,24 +151,104 @@ function RecoveryCaseDetails({ id, onBack }) {
     }
   };
 
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case "OPEN":
+        return <AlertTriangle size={14} />;
+
+      case "IN_PROGRESS":
+        return <Clock3 size={14} />;
+
+      case "RECOVERED":
+        return <CheckCircle2 size={14} />;
+
+      case "FAILED":
+        return <AlertTriangle size={14} />;
+
+      default:
+        return null;
+    }
+  };
+
+  /*
+   * =========================================================
+   * ACTION STATUS
+   * =========================================================
+   */
+
+  const getActionStatusClass = (status) => {
+    switch (status) {
+      case "EXECUTED":
+        return "action-status-executed";
+
+      case "PENDING":
+        return "action-status-pending";
+
+      case "FAILED":
+        return "action-status-failed";
+
+      default:
+        return "";
+    }
+  };
+
+  const getPriorityClass = (priority) => {
+    switch (priority) {
+      case "HIGH":
+        return "action-priority-high";
+
+      case "MEDIUM_HIGH":
+        return "action-priority-medium-high";
+
+      case "MEDIUM":
+        return "action-priority-medium";
+
+      case "LOW":
+        return "action-priority-low";
+
+      default:
+        return "";
+    }
+  };
+
+  /*
+   * =========================================================
+   * LOADING
+   * =========================================================
+   */
+
   if (loading) {
     return (
       <div className="page-state">
         <div className="spinner" />
-        <p>Loading recovery case...</p>
+
+        <p>
+          Loading recovery case...
+        </p>
       </div>
     );
   }
 
+  /*
+   * =========================================================
+   * ERROR
+   * =========================================================
+   */
+
   if (error) {
     return (
       <div className="error-card">
+
         <AlertTriangle size={20} />
-        <span>{error}</span>
+
+        <span>
+          {error}
+        </span>
 
         <button onClick={loadCase}>
           Retry
         </button>
+
       </div>
     );
   }
@@ -100,20 +257,31 @@ function RecoveryCaseDetails({ id, onBack }) {
     return null;
   }
 
+  /*
+   * =========================================================
+   * PAGE
+   * =========================================================
+   */
+
   return (
     <div className="recovery-details-page">
 
-      {/* Back */}
+      {/* =====================================================
+          BACK
+      ===================================================== */}
 
       <button
         className="back-button"
         onClick={onBack}
       >
         <ArrowLeft size={17} />
+
         Back to Recovery Cases
       </button>
 
-      {/* Heading */}
+      {/* =====================================================
+          HEADING
+      ===================================================== */}
 
       <div className="page-heading">
 
@@ -138,16 +306,8 @@ function RecoveryCaseDetails({ id, onBack }) {
             recoveryCase.status
           )}`}
         >
-          {recoveryCase.status === "OPEN" && (
-            <AlertTriangle size={14} />
-          )}
-
-          {recoveryCase.status === "IN_PROGRESS" && (
-            <Clock3 size={14} />
-          )}
-
-          {recoveryCase.status === "RECOVERED" && (
-            <CheckCircle2 size={14} />
+          {getStatusIcon(
+            recoveryCase.status
           )}
 
           {recoveryCase.status}
@@ -155,21 +315,34 @@ function RecoveryCaseDetails({ id, onBack }) {
 
       </div>
 
-      {/* Overview */}
+      {/* =====================================================
+          OVERVIEW
+      ===================================================== */}
 
       <section className="details-grid">
+
+        {/* FINANCIAL IMPACT */}
 
         <div className="detail-card">
 
           <div className="detail-card-header">
+
             <div className="detail-icon">
               <CreditCard size={18} />
             </div>
 
             <div>
-              <h2>Financial Impact</h2>
-              <span>Revenue recovery metrics</span>
+
+              <h2>
+                Financial Impact
+              </h2>
+
+              <span>
+                Revenue recovery metrics
+              </span>
+
             </div>
+
           </div>
 
           <div className="detail-metrics">
@@ -192,17 +365,28 @@ function RecoveryCaseDetails({ id, onBack }) {
 
         </div>
 
+        {/* RECOVERY INTELLIGENCE */}
+
         <div className="detail-card">
 
           <div className="detail-card-header">
+
             <div className="detail-icon">
               <ShieldCheck size={18} />
             </div>
 
             <div>
-              <h2>Recovery Intelligence</h2>
-              <span>AI recovery assessment</span>
+
+              <h2>
+                Recovery Intelligence
+              </h2>
+
+              <span>
+                AI recovery assessment
+              </span>
+
             </div>
+
           </div>
 
           <div className="detail-metrics">
@@ -216,7 +400,9 @@ function RecoveryCaseDetails({ id, onBack }) {
 
             <DetailMetric
               label="Recovery Potential"
-              value={recoveryCase.recoveryPotential}
+              value={
+                recoveryCase.recoveryPotential
+              }
             />
 
           </div>
@@ -225,17 +411,24 @@ function RecoveryCaseDetails({ id, onBack }) {
 
       </section>
 
-      {/* Recovery Score */}
+      {/* =====================================================
+          RECOVERY PROBABILITY
+      ===================================================== */}
 
       <section className="details-card">
 
         <div className="card-header">
 
           <div>
-            <h2>Recovery Probability</h2>
+
+            <h2>
+              Recovery Probability
+            </h2>
+
             <span>
               Current probability of successful recovery
             </span>
+
           </div>
 
           <strong className="large-score">
@@ -247,6 +440,7 @@ function RecoveryCaseDetails({ id, onBack }) {
         </div>
 
         <div className="large-score-bar">
+
           <div
             className="large-score-fill"
             style={{
@@ -257,19 +451,228 @@ function RecoveryCaseDetails({ id, onBack }) {
               }%`,
             }}
           />
+
         </div>
 
       </section>
 
-      {/* Case Information */}
+      {/* =====================================================
+          RECOVERY ACTION
+      ===================================================== */}
+
+      <section className="details-card recovery-action-card">
+
+        <div className="card-header">
+
+          <div>
+
+            <h2>
+              Recovery Action
+            </h2>
+
+            <span>
+              Decision generated by the recovery policy engine
+            </span>
+
+          </div>
+
+          <div className="action-header-icon">
+            <Zap size={18} />
+          </div>
+
+        </div>
+
+        {/* ACTION LOADING */}
+
+        {actionsLoading && (
+          <div className="action-loading">
+
+            <div className="spinner" />
+
+            <span>
+              Loading recovery action...
+            </span>
+
+          </div>
+        )}
+
+        {/* ACTION ERROR */}
+
+        {!actionsLoading && actionsError && (
+          <div className="action-error">
+
+            <AlertTriangle size={18} />
+
+            <span>
+              {actionsError}
+            </span>
+
+          </div>
+        )}
+
+        {/* NO ACTION */}
+
+        {!actionsLoading &&
+          !actionsError &&
+          recoveryActions.length === 0 && (
+
+            <div className="no-action">
+
+              <ShieldCheck size={20} />
+
+              <span>
+                No recovery action has been generated
+                for this case.
+              </span>
+
+            </div>
+          )}
+
+        {/* ACTIONS */}
+
+        {!actionsLoading &&
+          !actionsError &&
+          recoveryActions.length > 0 && (
+
+            <div className="recovery-actions-list">
+
+              {recoveryActions.map(
+                (action) => (
+
+                  <div
+                    className="recovery-action"
+                    key={action.id}
+                  >
+
+                    {/* ACTION TOP */}
+
+                    <div className="recovery-action-top">
+
+                      <div>
+
+                        <div className="action-label">
+                          Strategy
+                        </div>
+
+                        <strong className="action-strategy">
+                          {action.strategy}
+                        </strong>
+
+                      </div>
+
+                      <div className="action-badges">
+
+                        <span
+                          className={`action-priority ${getPriorityClass(
+                            action.priority
+                          )}`}
+                        >
+                          {action.priority}
+                        </span>
+
+                        <span
+                          className={`action-status ${getActionStatusClass(
+                            action.status
+                          )}`}
+                        >
+                          {action.status}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                    {/* ACTION DETAILS */}
+
+                    <div className="action-details">
+
+                      <div className="action-detail">
+
+                        <span>
+                          Recovery Score
+                        </span>
+
+                        <strong>
+                          {formatScore(
+                            action.recoveryScore
+                          )}
+                        </strong>
+
+                      </div>
+
+                      <div className="action-detail">
+
+                        <span>
+                          Created
+                        </span>
+
+                        <strong>
+                          {formatDate(
+                            action.createdAt
+                          )}
+                        </strong>
+
+                      </div>
+
+                      <div className="action-detail">
+
+                        <span>
+                          Executed
+                        </span>
+
+                        <strong>
+                          {formatDate(
+                            action.executedAt
+                          )}
+                        </strong>
+
+                      </div>
+
+                    </div>
+
+                    {/* REASON */}
+
+                    {action.reason && (
+                      <div className="action-reason">
+
+                        <span>
+                          Reason
+                        </span>
+
+                        <p>
+                          {action.reason}
+                        </p>
+
+                      </div>
+                    )}
+
+                  </div>
+                )
+              )}
+
+            </div>
+          )}
+
+      </section>
+
+      {/* =====================================================
+          CASE INFORMATION
+      ===================================================== */}
 
       <section className="details-card">
 
         <div className="card-header">
 
           <div>
-            <h2>Case Information</h2>
-            <span>Identifiers and timestamps</span>
+
+            <h2>
+              Case Information
+            </h2>
+
+            <span>
+              Identifiers and timestamps
+            </span>
+
           </div>
 
         </div>
@@ -283,12 +686,16 @@ function RecoveryCaseDetails({ id, onBack }) {
 
           <InfoRow
             label="Subscription ID"
-            value={recoveryCase.subscriptionId}
+            value={
+              recoveryCase.subscriptionId
+            }
           />
 
           <InfoRow
             label="Failed Payment ID"
-            value={recoveryCase.failedPaymentId}
+            value={
+              recoveryCase.failedPaymentId
+            }
           />
 
           <InfoRow
@@ -314,7 +721,9 @@ function RecoveryCaseDetails({ id, onBack }) {
 
       </section>
 
-      {/* Policy Guard */}
+      {/* =====================================================
+          POLICY GUARD
+      ===================================================== */}
 
       <section className="policy-guard detail-policy">
 
@@ -382,7 +791,7 @@ function InfoRow({
       </span>
 
       <strong>
-        {value}
+        {value || "—"}
       </strong>
 
     </div>

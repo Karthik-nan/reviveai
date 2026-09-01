@@ -19,6 +19,9 @@ import {
 import { getDashboardOverview } from "./api/dashboardApi";
 import RecoveryCases from "./pages/RecoveryCases";
 import RecoveryCaseDetails from "./pages/RecoveryCaseDetails";
+import Subscriptions from "./pages/Subscriptions";
+import Customers from "./pages/Customers";
+import CustomerDetails from "./pages/CustomerDetails";
 
 import "./App.css";
 
@@ -32,6 +35,13 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [selectedCaseId, setSelectedCaseId] = useState(null);
+
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+
+  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState(null);
+
+  // Stores the customer from which a subscription was opened
+  const [subscriptionCustomerId, setSubscriptionCustomerId] = useState(null);
 
   useEffect(() => {
     if (currentPage === "dashboard") {
@@ -64,13 +74,19 @@ function App() {
 
   const navigateTo = (page) => {
     setCurrentPage(page);
-
-    // Close mobile sidebar
     setSidebarOpen(false);
 
-    // Clear selected recovery case
     if (page !== "recovery-cases") {
       setSelectedCaseId(null);
+    }
+
+    if (page !== "customers") {
+      setSelectedCustomerId(null);
+    }
+
+    if (page !== "subscriptions") {
+      setSelectedSubscriptionId(null);
+      setSubscriptionCustomerId(null);
     }
   };
 
@@ -82,7 +98,53 @@ function App() {
 
   const openRecoveryCase = (id) => {
     setSelectedCaseId(id);
+    setCurrentPage("recovery-cases");
+    setSidebarOpen(false);
   };
+
+  /*
+   * ========================================================
+   * CUSTOMER NAVIGATION
+   * ========================================================
+   */
+
+  const openCustomer = (id) => {
+    setSelectedCustomerId(id);
+    setCurrentPage("customers");
+    setSidebarOpen(false);
+  };
+
+  const closeCustomer = () => {
+    setSelectedCustomerId(null);
+  };
+
+  /*
+   * ========================================================
+   * SUBSCRIPTION NAVIGATION
+   * ========================================================
+   */
+
+  const openSubscription = (id, customerId = null) => {
+    setSelectedSubscriptionId(id);
+
+    // Remember the customer when subscription was opened
+    // from Customer Details.
+    setSubscriptionCustomerId(customerId);
+
+    setCurrentPage("subscriptions");
+    setSidebarOpen(false);
+  };
+
+  const closeSubscription = () => {
+    setSelectedSubscriptionId(null);
+    setSubscriptionCustomerId(null);
+  };
+
+  /*
+   * ========================================================
+   * RECOVERY CASE CLOSE
+   * ========================================================
+   */
 
   const closeRecoveryCase = () => {
     setSelectedCaseId(null);
@@ -346,10 +408,24 @@ function App() {
           ================================================= */}
 
           {currentPage === "subscriptions" && (
-            <ComingSoonPage
-              title="Subscriptions"
-              description="Subscription monitoring will be available here."
-              icon={<CreditCard size={22} />}
+            <Subscriptions
+              onSelectCase={openRecoveryCase}
+              initialSubscriptionId={selectedSubscriptionId}
+              onBackToCustomer={() => {
+                setSelectedSubscriptionId(null);
+
+                // If subscription was opened from a customer,
+                // return to that customer's details page.
+                if (subscriptionCustomerId) {
+                  setSelectedCustomerId(subscriptionCustomerId);
+                  setSubscriptionCustomerId(null);
+                  setCurrentPage("customers");
+                  return;
+                }
+
+                // Otherwise return to the normal subscriptions page.
+                setCurrentPage("subscriptions");
+              }}
             />
           )}
 
@@ -357,13 +433,26 @@ function App() {
               CUSTOMERS
           ================================================= */}
 
-          {currentPage === "customers" && (
-            <ComingSoonPage
-              title="Customers"
-              description="Customer recovery intelligence will be available here."
-              icon={<Users size={22} />}
-            />
-          )}
+          {currentPage === "customers" &&
+            !selectedCustomerId && (
+              <Customers
+                onSelectCustomer={openCustomer}
+              />
+            )}
+
+          {currentPage === "customers" &&
+            selectedCustomerId && (
+              <CustomerDetails
+                id={selectedCustomerId}
+                onBack={closeCustomer}
+                onSelectSubscription={(subscriptionId) =>
+                  openSubscription(
+                    subscriptionId,
+                    selectedCustomerId
+                  )
+                }
+              />
+            )}
 
           {/* =================================================
               POLICIES

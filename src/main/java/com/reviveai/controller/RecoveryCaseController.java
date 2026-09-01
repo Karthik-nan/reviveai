@@ -1,5 +1,6 @@
 package com.reviveai.controller;
 
+import com.reviveai.dto.RecoveryActionResponse;
 import com.reviveai.dto.RecoveryCaseResponse;
 import com.reviveai.service.RecoveryCaseService;
 import lombok.RequiredArgsConstructor;
@@ -27,5 +28,13 @@ public class RecoveryCaseController {
     ) {
 
         return recoveryCaseService.getRecoveryCaseById(id);
+    }
+
+    @GetMapping("/{id}/actions")
+    public List<RecoveryActionResponse> getRecoveryActions(
+            @PathVariable UUID id
+    ) {
+
+        return recoveryCaseService.getRecoveryActions(id);
     }
 }
