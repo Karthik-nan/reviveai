@@ -1,9 +1,12 @@
 package com.reviveai.repository;
 
+import com.reviveai.dashboard.dto.RecoveryTrendPoint;
 import com.reviveai.entity.RecoveryCase;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -67,4 +70,22 @@ public interface RecoveryCaseRepository
             RecoveryCase.RecoveryStatus status
     );
 
+    // =========================================================
+    // DASHBOARD RECOVERY TREND
+    // =========================================================
+
+    @Query(value = """
+            SELECT
+                DATE(rc.resolved_at) AS recovery_date,
+                COALESCE(SUM(rc.amount_recovered), 0) AS amount_recovered
+            FROM recovery_cases rc
+            WHERE rc.resolved_at IS NOT NULL
+              AND rc.amount_recovered > 0
+              AND rc.resolved_at >= :from
+            GROUP BY DATE(rc.resolved_at)
+            ORDER BY DATE(rc.resolved_at)
+            """, nativeQuery = true)
+    List<Object[]> findRecoveryTrend(
+            OffsetDateTime from
+    );
 }

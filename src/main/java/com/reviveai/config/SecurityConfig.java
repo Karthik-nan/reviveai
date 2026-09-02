@@ -72,6 +72,20 @@ public class SecurityConfig {
                                 "/api/customers/**"
                         ).permitAll()
 
+                        // Recovery Policies
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/policies",
+                                "/api/policies/**"
+                        ).permitAll()
+
+                        // System Settings
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/settings",
+                                "/api/settings/**"
+                        ).permitAll()
+
                         // Health check
                         .requestMatchers(
                                 "/actuator/health"

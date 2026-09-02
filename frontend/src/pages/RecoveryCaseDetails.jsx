@@ -100,11 +100,25 @@ function RecoveryCaseDetails({ id, onBack }) {
     )}`;
   };
 
-  const formatScore = (value) => {
-    return `${(
-      Number(value || 0) * 100
-    ).toFixed(0)}%`;
-  };
+ const formatScore = (value) => {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return "—";
+  }
+
+  const numericValue = Number(value);
+
+  if (Number.isNaN(numericValue)) {
+    return "—";
+  }
+
+  return `${(
+    numericValue * 100
+  ).toFixed(0)}%`;
+};
 
   const formatDate = (value) => {
     if (!value) {

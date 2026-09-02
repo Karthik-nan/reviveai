@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+
 import {
   Activity,
   AlertTriangle,
@@ -9,7 +10,7 @@ import {
   CreditCard,
   LayoutDashboard,
   Menu,
-  Settings,
+  Settings as SettingsIcon,
   ShieldCheck,
   Users,
   X,
@@ -17,13 +18,17 @@ import {
 } from "lucide-react";
 
 import { getDashboardOverview } from "./api/dashboardApi";
+
 import RecoveryCases from "./pages/RecoveryCases";
 import RecoveryCaseDetails from "./pages/RecoveryCaseDetails";
 import Subscriptions from "./pages/Subscriptions";
 import Customers from "./pages/Customers";
 import CustomerDetails from "./pages/CustomerDetails";
+import Policies from "./pages/Policies";
+import SettingsPage from "./pages/Settings";
 
 import "./App.css";
+
 
 function App() {
   const [currentPage, setCurrentPage] = useState("dashboard");
@@ -38,16 +43,26 @@ function App() {
 
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
 
-  const [selectedSubscriptionId, setSelectedSubscriptionId] = useState(null);
+  const [selectedSubscriptionId, setSelectedSubscriptionId] =
+    useState(null);
 
   // Stores the customer from which a subscription was opened
-  const [subscriptionCustomerId, setSubscriptionCustomerId] = useState(null);
+  const [subscriptionCustomerId, setSubscriptionCustomerId] =
+    useState(null);
+
+
+  /*
+   * ========================================================
+   * DASHBOARD
+   * ========================================================
+   */
 
   useEffect(() => {
     if (currentPage === "dashboard") {
       loadDashboard();
     }
   }, [currentPage]);
+
 
   const loadDashboard = async () => {
     try {
@@ -65,6 +80,7 @@ function App() {
       setLoading(false);
     }
   };
+
 
   /*
    * ========================================================
@@ -90,6 +106,7 @@ function App() {
     }
   };
 
+
   /*
    * ========================================================
    * RECOVERY CASE NAVIGATION
@@ -101,6 +118,12 @@ function App() {
     setCurrentPage("recovery-cases");
     setSidebarOpen(false);
   };
+
+
+  const closeRecoveryCase = () => {
+    setSelectedCaseId(null);
+  };
+
 
   /*
    * ========================================================
@@ -114,9 +137,11 @@ function App() {
     setSidebarOpen(false);
   };
 
+
   const closeCustomer = () => {
     setSelectedCustomerId(null);
   };
+
 
   /*
    * ========================================================
@@ -135,20 +160,12 @@ function App() {
     setSidebarOpen(false);
   };
 
+
   const closeSubscription = () => {
     setSelectedSubscriptionId(null);
     setSubscriptionCustomerId(null);
   };
 
-  /*
-   * ========================================================
-   * RECOVERY CASE CLOSE
-   * ========================================================
-   */
-
-  const closeRecoveryCase = () => {
-    setSelectedCaseId(null);
-  };
 
   /*
    * ========================================================
@@ -163,9 +180,17 @@ function App() {
     })}`;
   };
 
+
   const formatPercent = (value) => {
     return `${Number(value || 0).toFixed(1)}%`;
   };
+
+
+  /*
+   * ========================================================
+   * RENDER
+   * ========================================================
+   */
 
   return (
     <div className="app">
@@ -180,6 +205,7 @@ function App() {
           onClick={() => setSidebarOpen(false)}
         />
       )}
+
 
       {/* =====================================================
           SIDEBAR
@@ -218,7 +244,10 @@ function App() {
 
         </div>
 
-        {/* NAVIGATION */}
+
+        {/* ===================================================
+            NAVIGATION
+        =================================================== */}
 
         <nav className="navigation">
 
@@ -230,51 +259,48 @@ function App() {
               MAIN
             </div>
 
+
+            {/* DASHBOARD */}
+
             <NavItem
               icon={<LayoutDashboard size={18} />}
               label="Dashboard"
-              active={
-                currentPage === "dashboard"
-              }
-              onClick={() =>
-                navigateTo("dashboard")
-              }
+              active={currentPage === "dashboard"}
+              onClick={() => navigateTo("dashboard")}
             />
+
+
+            {/* RECOVERY CASES */}
 
             <NavItem
               icon={<AlertTriangle size={18} />}
               label="Recovery Cases"
-              active={
-                currentPage === "recovery-cases"
-              }
-              onClick={() =>
-                navigateTo("recovery-cases")
-              }
+              active={currentPage === "recovery-cases"}
+              onClick={() => navigateTo("recovery-cases")}
             />
+
+
+            {/* SUBSCRIPTIONS */}
 
             <NavItem
               icon={<CreditCard size={18} />}
               label="Subscriptions"
-              active={
-                currentPage === "subscriptions"
-              }
-              onClick={() =>
-                navigateTo("subscriptions")
-              }
+              active={currentPage === "subscriptions"}
+              onClick={() => navigateTo("subscriptions")}
             />
+
+
+            {/* CUSTOMERS */}
 
             <NavItem
               icon={<Users size={18} />}
               label="Customers"
-              active={
-                currentPage === "customers"
-              }
-              onClick={() =>
-                navigateTo("customers")
-              }
+              active={currentPage === "customers"}
+              onClick={() => navigateTo("customers")}
             />
 
           </div>
+
 
           {/* SYSTEM */}
 
@@ -284,33 +310,34 @@ function App() {
               SYSTEM
             </div>
 
+
+            {/* POLICIES */}
+
             <NavItem
               icon={<ShieldCheck size={18} />}
               label="Policies"
-              active={
-                currentPage === "policies"
-              }
-              onClick={() =>
-                navigateTo("policies")
-              }
+              active={currentPage === "policies"}
+              onClick={() => navigateTo("policies")}
             />
 
+
+            {/* SETTINGS */}
+
             <NavItem
-              icon={<Settings size={18} />}
+              icon={<SettingsIcon size={18} />}
               label="Settings"
-              active={
-                currentPage === "settings"
-              }
-              onClick={() =>
-                navigateTo("settings")
-              }
+              active={currentPage === "settings"}
+              onClick={() => navigateTo("settings")}
             />
 
           </div>
 
         </nav>
 
-        {/* SYSTEM STATUS */}
+
+        {/* ===================================================
+            SYSTEM STATUS
+        =================================================== */}
 
         <div className="system-status">
 
@@ -332,21 +359,22 @@ function App() {
 
       </aside>
 
+
       {/* =====================================================
           MAIN CONTENT
       ===================================================== */}
 
       <main className="main-content">
 
-        {/* TOPBAR */}
+        {/* ===================================================
+            TOPBAR
+        =================================================== */}
 
         <header className="topbar">
 
           <button
             className="mobile-menu"
-            onClick={() =>
-              setSidebarOpen(true)
-            }
+            onClick={() => setSidebarOpen(true)}
           >
             <Menu size={22} />
           </button>
@@ -359,11 +387,13 @@ function App() {
 
         </header>
 
+
         {/* ===================================================
             PAGE CONTENT
         =================================================== */}
 
         <div className="content">
+
 
           {/* =================================================
               DASHBOARD
@@ -380,6 +410,7 @@ function App() {
             />
           )}
 
+
           {/* =================================================
               RECOVERY CASES LIST
           ================================================= */}
@@ -390,6 +421,7 @@ function App() {
                 onSelectCase={openRecoveryCase}
               />
             )}
+
 
           {/* =================================================
               RECOVERY CASE DETAILS
@@ -402,6 +434,7 @@ function App() {
                 onBack={closeRecoveryCase}
               />
             )}
+
 
           {/* =================================================
               SUBSCRIPTIONS
@@ -417,20 +450,27 @@ function App() {
                 // If subscription was opened from a customer,
                 // return to that customer's details page.
                 if (subscriptionCustomerId) {
-                  setSelectedCustomerId(subscriptionCustomerId);
+                  setSelectedCustomerId(
+                    subscriptionCustomerId
+                  );
+
                   setSubscriptionCustomerId(null);
+
                   setCurrentPage("customers");
+
                   return;
                 }
 
-                // Otherwise return to the normal subscriptions page.
+                // Otherwise return to the normal
+                // subscriptions page.
                 setCurrentPage("subscriptions");
               }}
             />
           )}
 
+
           {/* =================================================
-              CUSTOMERS
+              CUSTOMERS LIST
           ================================================= */}
 
           {currentPage === "customers" &&
@@ -439,6 +479,11 @@ function App() {
                 onSelectCustomer={openCustomer}
               />
             )}
+
+
+          {/* =================================================
+              CUSTOMER DETAILS
+          ================================================= */}
 
           {currentPage === "customers" &&
             selectedCustomerId && (
@@ -454,28 +499,22 @@ function App() {
               />
             )}
 
+
           {/* =================================================
               POLICIES
           ================================================= */}
 
           {currentPage === "policies" && (
-            <ComingSoonPage
-              title="Recovery Policies"
-              description="Deterministic recovery policies will be managed here."
-              icon={<ShieldCheck size={22} />}
-            />
+            <Policies />
           )}
+
 
           {/* =================================================
               SETTINGS
           ================================================= */}
 
           {currentPage === "settings" && (
-            <ComingSoonPage
-              title="Settings"
-              description="System configuration will be available here."
-              icon={<Settings size={22} />}
-            />
+            <SettingsPage />
           )}
 
         </div>
@@ -503,7 +542,9 @@ function DashboardPage({
   return (
     <>
 
-      {/* PAGE HEADING */}
+      {/* ===================================================
+          PAGE HEADING
+      =================================================== */}
 
       <div className="page-heading">
 
@@ -524,6 +565,7 @@ function DashboardPage({
 
         </div>
 
+
         <button
           className="analysis-button"
           onClick={loadDashboard}
@@ -534,7 +576,10 @@ function DashboardPage({
 
       </div>
 
-      {/* LOADING */}
+
+      {/* ===================================================
+          LOADING
+      =================================================== */}
 
       {loading && (
         <div className="loading-card">
@@ -546,7 +591,10 @@ function DashboardPage({
         </div>
       )}
 
-      {/* ERROR */}
+
+      {/* ===================================================
+          ERROR
+      =================================================== */}
 
       {error && (
         <div className="error-card">
@@ -557,28 +605,29 @@ function DashboardPage({
             {error}
           </span>
 
-          <button
-            onClick={loadDashboard}
-          >
+          <button onClick={loadDashboard}>
             Retry
           </button>
 
         </div>
       )}
 
-      {/* DASHBOARD */}
+
+      {/* ===================================================
+          DASHBOARD
+      =================================================== */}
 
       {dashboard && !loading && (
         <>
 
-          {/* KPI CARDS */}
+          {/* =================================================
+              KPI CARDS
+          ================================================= */}
 
           <section className="metrics-grid">
 
             <MetricCard
-              icon={
-                <AlertTriangle size={19} />
-              }
+              icon={<AlertTriangle size={19} />}
               label="Revenue at Risk"
               value={formatCurrency(
                 dashboard.revenueAtRisk
@@ -588,10 +637,9 @@ function DashboardPage({
               description="vs. previous period"
             />
 
+
             <MetricCard
-              icon={
-                <CheckCircle2 size={19} />
-              }
+              icon={<CheckCircle2 size={19} />}
               label="Revenue Recovered"
               value={formatCurrency(
                 dashboard.revenueRecovered
@@ -601,10 +649,9 @@ function DashboardPage({
               description="vs. previous period"
             />
 
+
             <MetricCard
-              icon={
-                <Activity size={19} />
-              }
+              icon={<Activity size={19} />}
               label="Recovery Rate"
               value={formatPercent(
                 dashboard.recoveryRate
@@ -614,10 +661,9 @@ function DashboardPage({
               description="vs. previous period"
             />
 
+
             <MetricCard
-              icon={
-                <CreditCard size={19} />
-              }
+              icon={<CreditCard size={19} />}
               label="Active Cases"
               value={dashboard.activeCases}
               change="-8.1%"
@@ -626,11 +672,16 @@ function DashboardPage({
 
           </section>
 
-          {/* MAIN GRID */}
+
+          {/* =================================================
+              MAIN DASHBOARD GRID
+          ================================================= */}
 
           <section className="dashboard-grid">
 
-            {/* CHART */}
+            {/* =================================================
+                REVENUE CHART
+            ================================================= */}
 
             <div className="chart-card">
 
@@ -647,6 +698,7 @@ function DashboardPage({
                   </span>
 
                 </div>
+
 
                 <select defaultValue="7">
 
@@ -666,11 +718,17 @@ function DashboardPage({
 
               </div>
 
-              <RecoveryChart />
+
+              <RecoveryChart
+                recoveryTrend={dashboard.recoveryTrend}
+              />
 
             </div>
 
-            {/* AI INTELLIGENCE */}
+
+            {/* =================================================
+                AI INTELLIGENCE
+            ================================================= */}
 
             <div className="intelligence-card">
 
@@ -688,11 +746,13 @@ function DashboardPage({
 
                 </div>
 
+
                 <div className="ai-icon">
                   <Bot size={19} />
                 </div>
 
               </div>
+
 
               <div className="intelligence-list">
 
@@ -703,6 +763,7 @@ function DashboardPage({
                   )}
                 />
 
+
                 <Insight
                   label="High-Risk Subscriptions"
                   value={
@@ -710,12 +771,14 @@ function DashboardPage({
                   }
                 />
 
+
                 <Insight
                   label="Automated Recoveries"
                   value={
                     dashboard.automatedRecoveries
                   }
                 />
+
 
                 <Insight
                   label="Manual Reviews"
@@ -725,6 +788,9 @@ function DashboardPage({
                 />
 
               </div>
+
+
+              {/* POLICY GUARD */}
 
               <div className="policy-guard">
 
@@ -782,6 +848,7 @@ function NavItem({
       <span>
         {label}
       </span>
+
     </button>
   );
 }
@@ -809,6 +876,7 @@ function MetricCard({
           {icon}
         </div>
 
+
         <div
           className={`metric-change ${
             positive
@@ -829,13 +897,16 @@ function MetricCard({
 
       </div>
 
+
       <div className="metric-label">
         {label}
       </div>
 
+
       <div className="metric-value">
         {value}
       </div>
+
 
       <div className="metric-description">
         {description}
@@ -874,30 +945,74 @@ function Insight({
 /* =========================================================
    RECOVERY CHART
 ========================================================= */
+function RecoveryChart({
+  recoveryTrend = [],
+}) {
+  /*
+   * Build all 7 days, even when there was
+   * no recovered revenue on a particular day.
+   */
+  const today = new Date();
 
-function RecoveryChart() {
+  const last7Days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
 
-  const values = [
-    31,
-    45,
-    38,
-    62,
-    52,
-    72,
-    65,
-  ];
+    date.setDate(today.getDate() - (6 - index));
 
-  const days = [
-    "Mon",
-    "Tue",
-    "Wed",
-    "Thu",
-    "Fri",
-    "Sat",
-    "Sun",
-  ];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
 
-  const max = Math.max(...values);
+    return `${year}-${month}-${day}`;
+  });
+
+  /*
+   * Match backend recovery data to each date.
+   * Missing dates automatically become ₹0.
+   */
+  const chartData = last7Days.map((date) => {
+    const recovery = recoveryTrend.find(
+      (item) => item.date === date
+    );
+
+    return {
+      date,
+      amountRecovered: Number(
+        recovery?.amountRecovered || 0
+      ),
+    };
+  });
+
+  const values = chartData.map(
+    (item) => item.amountRecovered
+  );
+
+  const max = Math.max(...values, 1);
+
+
+  const formatDay = (date) => {
+    const parsedDate = new Date(
+      `${date}T00:00:00`
+    );
+
+    return parsedDate.toLocaleDateString(
+      "en-IN",
+      {
+        weekday: "short",
+      }
+    );
+  };
+
+
+  const formatCurrency = (value) => {
+    return `₹${Number(value || 0).toLocaleString(
+      "en-IN",
+      {
+        maximumFractionDigits: 0,
+      }
+    )}`;
+  };
+
 
   return (
     <div className="chart">
@@ -906,44 +1021,66 @@ function RecoveryChart() {
 
         <div className="y-axis">
 
-          <span>₹40K</span>
-          <span>₹30K</span>
-          <span>₹20K</span>
-          <span>₹10K</span>
-          <span>₹0</span>
+          <span>
+            {formatCurrency(max)}
+          </span>
+
+          <span>
+            {formatCurrency(max * 0.75)}
+          </span>
+
+          <span>
+            {formatCurrency(max * 0.5)}
+          </span>
+
+          <span>
+            {formatCurrency(max * 0.25)}
+          </span>
+
+          <span>
+            ₹0
+          </span>
 
         </div>
 
+
         <div className="bars">
 
-          {values.map(
-            (value, index) => (
+          {chartData.map((item) => {
 
+            const value =
+              item.amountRecovered;
+
+            return (
               <div
                 className="bar-column"
-                key={days[index]}
+                key={item.date}
               >
 
                 <div className="bar-wrapper">
 
-                  <div
-                    className="bar"
-                    style={{
-                      height:
-                        `${(value / max) * 100}%`,
-                    }}
-                  />
+                  {value > 0 && (
+                    <div
+                      className="bar"
+                      style={{
+                        height:
+                          `${(value / max) * 100}%`,
+                      }}
+                      title={`${item.date}: ${formatCurrency(value)}`}
+                    />
+                  )}
 
                 </div>
 
+
                 <span>
-                  {days[index]}
+                  {formatDay(item.date)}
                 </span>
 
               </div>
+            );
 
-            )
-          )}
+          })}
 
         </div>
 
@@ -952,7 +1089,6 @@ function RecoveryChart() {
     </div>
   );
 }
-
 
 /* =========================================================
    COMING SOON PAGE
@@ -986,6 +1122,7 @@ function ComingSoonPage({
         </div>
 
       </div>
+
 
       <div className="loading-card">
 

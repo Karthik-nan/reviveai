@@ -1,6 +1,7 @@
 package com.reviveai.dashboard;
 
 import com.reviveai.dashboard.dto.DashboardOverviewResponse;
+import com.reviveai.dashboard.dto.RecoveryTrendPoint;
 import com.reviveai.entity.RecoveryCase;
 import com.reviveai.recovery.RecoveryStrategy;
 import com.reviveai.repository.RecoveryActionRepository;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 @Slf4j
@@ -82,13 +84,38 @@ public class DashboardServiceImpl implements DashboardService {
                         totalActions - manualReviews
                 );
 
+        // =========================================================
+        // RECOVERY TREND
+        // =========================================================
+
+        OffsetDateTime from =
+                OffsetDateTime.now().minusDays(6);
+
+        List<Object[]> trendRows =
+                recoveryCaseRepository.findRecoveryTrend(from);
+
+        List<RecoveryTrendPoint> recoveryTrend =
+                trendRows.stream()
+                        .map(row ->
+                                RecoveryTrendPoint.builder()
+                                        .date((java.time.LocalDate) row[0])
+                                        .amountRecovered(
+                                                new BigDecimal(
+                                                        row[1].toString()
+                                                )
+                                        )
+                                        .build()
+                        )
+                        .toList();
+
         log.info(
                 "Dashboard overview calculated. " +
                         "revenueAtRisk={}, revenueRecovered={}, " +
                         "recoveryRate={}, activeCases={}, " +
                         "averageRecoveryProbability={}, " +
                         "highRiskSubscriptions={}, " +
-                        "automatedRecoveries={}, manualReviews={}",
+                        "automatedRecoveries={}, manualReviews={}, " +
+                        "recoveryTrendPoints={}",
                 revenueAtRisk,
                 revenueRecovered,
                 recoveryRate,
@@ -96,7 +123,8 @@ public class DashboardServiceImpl implements DashboardService {
                 averageRecoveryProbability,
                 highRiskSubscriptions,
                 automatedRecoveries,
-                manualReviews
+                manualReviews,
+                recoveryTrend.size()
         );
 
         return DashboardOverviewResponse.builder()
@@ -116,6 +144,7 @@ public class DashboardServiceImpl implements DashboardService {
                 .manualReviews(
                         manualReviews
                 )
+                .recoveryTrend(recoveryTrend)
                 .build();
     }
 

@@ -230,6 +230,29 @@ function Subscriptions({
 
   /*
    * ========================================================
+   * BACK NAVIGATION
+   * ========================================================
+   *
+   * IMPORTANT:
+   * Clear the local subscription details first.
+   * Then notify App.jsx to navigate to the correct page.
+   */
+
+  const handleBack = () => {
+
+    closeSubscription();
+
+    if (onBackToCustomer) {
+
+      onBackToCustomer();
+
+    }
+
+  };
+
+
+  /*
+   * ========================================================
    * FORMAT CURRENCY
    * ========================================================
    */
@@ -273,23 +296,23 @@ function Subscriptions({
    * ========================================================
    */
 
-  const formatPercent = (score) => {
+     const formatPercent = (score) => {
+  if (
+    score === null ||
+    score === undefined ||
+    score === ""
+  ) {
+    return "—";
+  }
 
-    if (
-      score === null ||
-      score === undefined
-    ) {
+  const numericScore = Number(score);
 
-      return "—";
+  if (Number.isNaN(numericScore)) {
+    return "—";
+  }
 
-    }
-
-
-    return `${(
-      Number(score) * 100
-    ).toFixed(0)}%`;
-
-  };
+  return `${(numericScore * 100).toFixed(0)}%`;
+};
 
 
   /*
@@ -545,8 +568,7 @@ function Subscriptions({
         }
 
         onBack={
-          onBackToCustomer ||
-          closeSubscription
+          handleBack
         }
 
         onRefresh={() =>
@@ -1315,60 +1337,45 @@ function SubscriptionDetails({
                 <div className="detail-list">
 
                   <DetailRow
-
                     label="Subscription ID"
-
                     value={
                       subscription.id
                     }
-
                   />
 
 
                   <DetailRow
-
                     label="External Subscription ID"
-
                     value={
                       subscription.externalSubscriptionId
                     }
-
                   />
 
 
                   <DetailRow
-
                     label="Customer ID"
-
                     value={
                       subscription.customerId ||
                       "—"
                     }
-
                   />
 
 
                   <DetailRow
-
                     label="Currency"
-
                     value={
                       subscription.currency
                     }
-
                   />
 
 
                   <DetailRow
-
                     label="Created"
-
                     value={
                       formatDateTime(
                         subscription.createdAt
                       )
                     }
-
                   />
 
                 </div>
