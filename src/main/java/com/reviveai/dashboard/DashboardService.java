@@ -5,4 +5,7 @@ import com.reviveai.dashboard.dto.DashboardOverviewResponse;
 public interface DashboardService {
 
     DashboardOverviewResponse getOverview();
+
+    void runRecoveryAnalysis();
+
 }

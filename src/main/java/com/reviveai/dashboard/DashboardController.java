@@ -2,9 +2,7 @@ package com.reviveai.dashboard;
 
 import com.reviveai.dashboard.dto.DashboardOverviewResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/dashboard")
@@ -16,5 +14,10 @@ public class DashboardController {
     @GetMapping("/overview")
     public DashboardOverviewResponse getOverview() {
         return dashboardService.getOverview();
+    }
+
+    @PostMapping("/recovery-analysis")
+    public void runRecoveryAnalysis() {
+        dashboardService.runRecoveryAnalysis();
     }
 }

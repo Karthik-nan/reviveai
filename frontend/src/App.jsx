@@ -17,7 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 
-import { getDashboardOverview } from "./api/dashboardApi";
+import { getDashboardOverview,runRecoveryAnalysis } from "./api/dashboardApi";
 
 import RecoveryCases from "./pages/RecoveryCases";
 import RecoveryCaseDetails from "./pages/RecoveryCaseDetails";
@@ -26,6 +26,7 @@ import Customers from "./pages/Customers";
 import CustomerDetails from "./pages/CustomerDetails";
 import Policies from "./pages/Policies";
 import SettingsPage from "./pages/Settings";
+
 
 import "./App.css";
 
@@ -36,7 +37,7 @@ function App() {
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
+  const [runningAnalysis, setRunningAnalysis] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [selectedCaseId, setSelectedCaseId] = useState(null);
@@ -80,6 +81,28 @@ function App() {
       setLoading(false);
     }
   };
+
+  const handleRunRecoveryAnalysis = async () => {
+  try {
+    setRunningAnalysis(true);
+    setError(null);
+
+    await runRecoveryAnalysis();
+
+    await loadDashboard();
+  } catch (err) {
+    console.error(
+      "Failed to run recovery analysis:",
+      err
+    );
+
+    setError(
+      "Unable to run recovery analysis."
+    );
+  } finally {
+    setRunningAnalysis(false);
+  }
+};
 
 
   /*
@@ -401,13 +424,15 @@ function App() {
 
           {currentPage === "dashboard" && (
             <DashboardPage
-              dashboard={dashboard}
-              loading={loading}
-              error={error}
-              loadDashboard={loadDashboard}
-              formatCurrency={formatCurrency}
-              formatPercent={formatPercent}
-            />
+             dashboard={dashboard}
+             loading={loading}
+               error={error}
+             loadDashboard={loadDashboard}
+             runningAnalysis={runningAnalysis}
+             handleRunRecoveryAnalysis={handleRunRecoveryAnalysis}
+             formatCurrency={formatCurrency}
+             formatPercent={formatPercent}
+             />
           )}
 
 
@@ -535,10 +560,11 @@ function DashboardPage({
   loading,
   error,
   loadDashboard,
+  runningAnalysis,
+  handleRunRecoveryAnalysis,
   formatCurrency,
   formatPercent,
 }) {
-
   return (
     <>
 
@@ -566,13 +592,17 @@ function DashboardPage({
         </div>
 
 
-        <button
+         <button
           className="analysis-button"
-          onClick={loadDashboard}
-        >
-          <Activity size={17} />
-          Run Recovery Analysis
-        </button>
+          onClick={handleRunRecoveryAnalysis}
+           disabled={runningAnalysis}
+           >
+           <Activity size={17} />
+
+            {runningAnalysis
+             ? "Running Recovery Analysis..."
+               : "Run Recovery Analysis"}
+             </button>
 
       </div>
 

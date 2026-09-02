@@ -6,9 +6,11 @@ import com.reviveai.entity.RecoveryCase;
 import com.reviveai.recovery.RecoveryStrategy;
 import com.reviveai.repository.RecoveryActionRepository;
 import com.reviveai.repository.RecoveryCaseRepository;
+import com.reviveai.service.RecoveryAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -22,6 +24,7 @@ public class DashboardServiceImpl implements DashboardService {
 
     private final RecoveryCaseRepository recoveryCaseRepository;
     private final RecoveryActionRepository recoveryActionRepository;
+    private final RecoveryAnalysisService recoveryAnalysisService;
 
     @Override
     public DashboardOverviewResponse getOverview() {
@@ -146,6 +149,44 @@ public class DashboardServiceImpl implements DashboardService {
                 )
                 .recoveryTrend(recoveryTrend)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void runRecoveryAnalysis() {
+
+        List<RecoveryCase> openCases =
+                recoveryCaseRepository.findByStatus(
+                        RecoveryCase.RecoveryStatus.OPEN
+                );
+
+        log.info(
+                "Starting manual recovery analysis. openCases={}",
+                openCases.size()
+        );
+
+        for (RecoveryCase recoveryCase : openCases) {
+
+            try {
+
+                recoveryAnalysisService.analyzeRecoveryCase(
+                        recoveryCase
+                );
+
+            } catch (Exception e) {
+
+                log.error(
+                        "Manual recovery analysis failed. recoveryCaseId={}",
+                        recoveryCase.getId(),
+                        e
+                );
+            }
+        }
+
+        log.info(
+                "Manual recovery analysis completed. analyzedCases={}",
+                openCases.size()
+        );
     }
 
     private boolean isActive(RecoveryCase recoveryCase) {

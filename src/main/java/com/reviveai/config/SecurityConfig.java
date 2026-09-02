@@ -46,11 +46,16 @@ public class SecurityConfig {
                         ).permitAll()
 
                         // Dashboard
+                        // Dashboard
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/dashboard/**"
                         ).permitAll()
 
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/dashboard/recovery-analysis"
+                        ).permitAll()
                         // Recovery cases
                         .requestMatchers(
                                 HttpMethod.GET,

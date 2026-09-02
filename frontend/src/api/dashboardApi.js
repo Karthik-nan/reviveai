@@ -14,4 +14,12 @@ export const getDashboardOverview = async () => {
   return response.data;
 };
 
+export const runRecoveryAnalysis = async () => {
+  const response = await dashboardApi.post(
+    "/dashboard/recovery-analysis"
+  );
+
+  return response.data;
+};
+
 export default dashboardApi;
