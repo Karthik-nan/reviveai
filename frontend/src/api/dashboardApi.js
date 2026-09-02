@@ -22,4 +22,14 @@ export const runRecoveryAnalysis = async () => {
   return response.data;
 };
 
+export const simulateSuccessfulPayment = async (
+  recoveryCaseId
+) => {
+  const response = await dashboardApi.post(
+    `/dashboard/recovery-cases/${recoveryCaseId}/simulate-success`
+  );
+
+  return response.data;
+};
+
 export default dashboardApi;

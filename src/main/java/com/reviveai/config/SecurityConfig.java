@@ -45,17 +45,18 @@ public class SecurityConfig {
                                 "/api/webhooks/razorpay"
                         ).permitAll()
 
-                        // Dashboard
-                        // Dashboard
+                        // Dashboard GET endpoints
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/dashboard/**"
                         ).permitAll()
 
+                        // Dashboard POST endpoints
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/api/dashboard/recovery-analysis"
+                                "/api/dashboard/**"
                         ).permitAll()
+
                         // Recovery cases
                         .requestMatchers(
                                 HttpMethod.GET,

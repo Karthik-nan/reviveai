@@ -17,7 +17,11 @@ import {
   Zap,
 } from "lucide-react";
 
-import { getDashboardOverview,runRecoveryAnalysis } from "./api/dashboardApi";
+import {
+  getDashboardOverview,
+  runRecoveryAnalysis,
+  simulateSuccessfulPayment,
+} from "./api/dashboardApi";
 
 import RecoveryCases from "./pages/RecoveryCases";
 import RecoveryCaseDetails from "./pages/RecoveryCaseDetails";
@@ -26,7 +30,6 @@ import Customers from "./pages/Customers";
 import CustomerDetails from "./pages/CustomerDetails";
 import Policies from "./pages/Policies";
 import SettingsPage from "./pages/Settings";
-
 
 import "./App.css";
 
@@ -38,6 +41,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [runningAnalysis, setRunningAnalysis] = useState(false);
+  const [simulatingPayment, setSimulatingPayment] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [selectedCaseId, setSelectedCaseId] = useState(null);
@@ -82,27 +86,55 @@ function App() {
     }
   };
 
+
   const handleRunRecoveryAnalysis = async () => {
-  try {
-    setRunningAnalysis(true);
-    setError(null);
+    try {
+      setRunningAnalysis(true);
+      setError(null);
 
-    await runRecoveryAnalysis();
+      await runRecoveryAnalysis();
 
-    await loadDashboard();
-  } catch (err) {
-    console.error(
-      "Failed to run recovery analysis:",
-      err
-    );
+      await loadDashboard();
+    } catch (err) {
+      console.error(
+        "Failed to run recovery analysis:",
+        err
+      );
 
-    setError(
-      "Unable to run recovery analysis."
-    );
-  } finally {
-    setRunningAnalysis(false);
-  }
-};
+      setError(
+        "Unable to run recovery analysis."
+      );
+    } finally {
+      setRunningAnalysis(false);
+    }
+  };
+
+
+  const handleSimulateSuccessfulPayment = async (
+    recoveryCaseId
+  ) => {
+    try {
+      setSimulatingPayment(true);
+      setError(null);
+
+      await simulateSuccessfulPayment(
+        recoveryCaseId
+      );
+
+      await loadDashboard();
+    } catch (err) {
+      console.error(
+        "Failed to simulate successful payment:",
+        err
+      );
+
+      setError(
+        "Unable to simulate successful payment."
+      );
+    } finally {
+      setSimulatingPayment(false);
+    }
+  };
 
 
   /*
@@ -360,7 +392,7 @@ function App() {
 
         {/* ===================================================
             SYSTEM STATUS
-        =================================================== */}
+        ===================================================== */}
 
         <div className="system-status">
 
@@ -413,10 +445,9 @@ function App() {
 
         {/* ===================================================
             PAGE CONTENT
-        =================================================== */}
+        ===================================================== */}
 
         <div className="content">
-
 
           {/* =================================================
               DASHBOARD
@@ -424,15 +455,21 @@ function App() {
 
           {currentPage === "dashboard" && (
             <DashboardPage
-             dashboard={dashboard}
-             loading={loading}
-               error={error}
-             loadDashboard={loadDashboard}
-             runningAnalysis={runningAnalysis}
-             handleRunRecoveryAnalysis={handleRunRecoveryAnalysis}
-             formatCurrency={formatCurrency}
-             formatPercent={formatPercent}
-             />
+              dashboard={dashboard}
+              loading={loading}
+              error={error}
+              loadDashboard={loadDashboard}
+              runningAnalysis={runningAnalysis}
+              handleRunRecoveryAnalysis={
+                handleRunRecoveryAnalysis
+              }
+              simulatingPayment={simulatingPayment}
+              handleSimulateSuccessfulPayment={
+                handleSimulateSuccessfulPayment
+              }
+              formatCurrency={formatCurrency}
+              formatPercent={formatPercent}
+            />
           )}
 
 
@@ -562,6 +599,8 @@ function DashboardPage({
   loadDashboard,
   runningAnalysis,
   handleRunRecoveryAnalysis,
+  simulatingPayment,
+  handleSimulateSuccessfulPayment,
   formatCurrency,
   formatPercent,
 }) {
@@ -592,17 +631,17 @@ function DashboardPage({
         </div>
 
 
-         <button
+        <button
           className="analysis-button"
           onClick={handleRunRecoveryAnalysis}
-           disabled={runningAnalysis}
-           >
-           <Activity size={17} />
+          disabled={runningAnalysis}
+        >
+          <Activity size={17} />
 
-            {runningAnalysis
-             ? "Running Recovery Analysis..."
-               : "Run Recovery Analysis"}
-             </button>
+          {runningAnalysis
+            ? "Running Recovery Analysis..."
+            : "Run Recovery Analysis"}
+        </button>
 
       </div>
 
@@ -843,6 +882,27 @@ function DashboardPage({
 
               </div>
 
+
+              {/* DEMO PAYMENT SIMULATION */}
+
+              {dashboard.latestRecoveryCaseId && (
+                <button
+                  className="analysis-button"
+                  onClick={() =>
+                    handleSimulateSuccessfulPayment(
+                      dashboard.latestRecoveryCaseId
+                    )
+                  }
+                  disabled={simulatingPayment}
+                >
+                  <CheckCircle2 size={17} />
+
+                  {simulatingPayment
+                    ? "Processing Successful Payment..."
+                    : "Simulate Successful Payment"}
+                </button>
+              )}
+
             </div>
 
           </section>
@@ -975,6 +1035,7 @@ function Insight({
 /* =========================================================
    RECOVERY CHART
 ========================================================= */
+
 function RecoveryChart({
   recoveryTrend = [],
 }) {
@@ -982,24 +1043,37 @@ function RecoveryChart({
    * Build all 7 days, even when there was
    * no recovered revenue on a particular day.
    */
+
   const today = new Date();
 
-  const last7Days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(today);
+  const last7Days = Array.from(
+    { length: 7 },
+    (_, index) => {
+      const date = new Date(today);
 
-    date.setDate(today.getDate() - (6 - index));
+      date.setDate(
+        today.getDate() - (6 - index)
+      );
 
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
+      const year = date.getFullYear();
+      const month = String(
+        date.getMonth() + 1
+      ).padStart(2, "0");
 
-    return `${year}-${month}-${day}`;
-  });
+      const day = String(
+        date.getDate()
+      ).padStart(2, "0");
+
+      return `${year}-${month}-${day}`;
+    }
+  );
+
 
   /*
    * Match backend recovery data to each date.
    * Missing dates automatically become ₹0.
    */
+
   const chartData = last7Days.map((date) => {
     const recovery = recoveryTrend.find(
       (item) => item.date === date
@@ -1013,11 +1087,15 @@ function RecoveryChart({
     };
   });
 
+
   const values = chartData.map(
     (item) => item.amountRecovered
   );
 
-  const max = Math.max(...values, 1);
+  const max = Math.max(
+    ...values,
+    1
+  );
 
 
   const formatDay = (date) => {
@@ -1096,7 +1174,9 @@ function RecoveryChart({
                         height:
                           `${(value / max) * 100}%`,
                       }}
-                      title={`${item.date}: ${formatCurrency(value)}`}
+                      title={`${item.date}: ${formatCurrency(
+                        value
+                      )}`}
                     />
                   )}
 
@@ -1119,6 +1199,7 @@ function RecoveryChart({
     </div>
   );
 }
+
 
 /* =========================================================
    COMING SOON PAGE

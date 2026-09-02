@@ -113,7 +113,27 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 4. EXTRACT SUBSCRIPTION ID
+        // 4. VALIDATE ORDER ID
+        // =====================================================
+
+        String orderId =
+                payment.getOrderId();
+
+        if (orderId == null
+                || orderId.isBlank()) {
+
+            log.warn(
+                    "Payment failure event does not contain order ID. " +
+                            "Cannot safely create recovery case. paymentId={}",
+                    paymentId
+            );
+
+            return;
+        }
+
+
+        // =====================================================
+        // 5. EXTRACT SUBSCRIPTION ID
         // =====================================================
 
         String subscriptionId =
@@ -145,7 +165,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 5. VALIDATE SUBSCRIPTION ID
+        // 6. VALIDATE SUBSCRIPTION ID
         // =====================================================
 
         if (subscriptionId == null
@@ -162,14 +182,15 @@ public class PaymentRecoveryService {
 
         log.info(
                 "Processing payment failure. " +
-                        "paymentId={}, subscriptionId={}",
+                        "paymentId={}, subscriptionId={}, orderId={}",
                 paymentId,
-                subscriptionId
+                subscriptionId,
+                orderId
         );
 
 
         // =====================================================
-        // 6. IDEMPOTENCY CHECK
+        // 7. IDEMPOTENCY CHECK
         // =====================================================
 
         if (paymentAttemptRepository
@@ -187,7 +208,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 7. FIND SUBSCRIPTION
+        // 8. FIND SUBSCRIPTION
         // =====================================================
 
         Subscription subscription =
@@ -214,7 +235,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 8. VALIDATE PAYMENT AMOUNT
+        // 9. VALIDATE PAYMENT AMOUNT
         // =====================================================
 
         if (payment.getAmount() == null) {
@@ -242,7 +263,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 9. CONVERT RAZORPAY AMOUNT
+        // 10. CONVERT RAZORPAY AMOUNT
         // =====================================================
 
         BigDecimal amount =
@@ -278,7 +299,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 10. CREATE PAYMENT ATTEMPT
+        // 11. CREATE PAYMENT ATTEMPT
         // =====================================================
 
         PaymentAttempt paymentAttempt =
@@ -287,7 +308,7 @@ public class PaymentRecoveryService {
                         .externalPaymentId(paymentId)
                         .idempotencyKey(paymentId)
                         .externalOrderId(
-                                payment.getOrderId()
+                                orderId
                         )
                         .amount(amount)
                         .status(
@@ -322,14 +343,15 @@ public class PaymentRecoveryService {
 
         log.info(
                 "PaymentAttempt created. " +
-                        "id={}, paymentId={}",
+                        "id={}, paymentId={}, orderId={}",
                 paymentAttempt.getId(),
-                paymentId
+                paymentId,
+                orderId
         );
 
 
         // =====================================================
-        // 11. MARK SUBSCRIPTION PAST DUE
+        // 12. MARK SUBSCRIPTION PAST DUE
         // =====================================================
 
         subscription.setStatus(
@@ -348,7 +370,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 12. EVALUATE SUBSCRIPTION HEALTH
+        // 13. EVALUATE SUBSCRIPTION HEALTH
         // =====================================================
 
         SubscriptionHealth health =
@@ -382,7 +404,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 13. DETERMINE RECOVERY POTENTIAL
+        // 14. DETERMINE RECOVERY POTENTIAL
         // =====================================================
 
         RecoveryCase.RecoveryPotential recoveryPotential =
@@ -390,7 +412,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 14. CREATE RECOVERY CASE
+        // 15. CREATE RECOVERY CASE
         // =====================================================
 
         RecoveryCase recoveryCase =
@@ -443,9 +465,10 @@ public class PaymentRecoveryService {
         log.info(
                 "RecoveryCase created. " +
                         "recoveryCaseId={}, paymentId={}, " +
-                        "amountAtRisk={}, potential={}",
+                        "orderId={}, amountAtRisk={}, potential={}",
                 recoveryCase.getId(),
                 paymentId,
+                orderId,
                 amount,
                 recoveryPotential
         );
@@ -461,8 +484,9 @@ public class PaymentRecoveryService {
                 recoveryCase.getId(),
                 "SYSTEM",
                 String.format(
-                        "{\"paymentId\":\"%s\",\"amountAtRisk\":%s,\"recoveryPotential\":\"%s\"}",
+                        "{\"paymentId\":\"%s\",\"orderId\":\"%s\",\"amountAtRisk\":%s,\"recoveryPotential\":\"%s\"}",
                         paymentId,
+                        orderId,
                         amount,
                         recoveryPotential
                 )
@@ -470,7 +494,7 @@ public class PaymentRecoveryService {
 
 
         // =====================================================
-        // 15. RUN RECOVERY ANALYSIS
+        // 16. RUN RECOVERY ANALYSIS
         // =====================================================
 
         recoveryAnalysisService.analyzeRecoveryCase(
